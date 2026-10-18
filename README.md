@@ -18,10 +18,10 @@ Allow camera access in Windows privacy settings. Defaults are tuned for mid-rang
 
 ## Gestures
 
-- Index extended, other fingers curled: move the cursor.
-- Thumb/index pinch: hold left mouse button while pinched (drag); release by separating.
-- Thumb/middle pinch with index raised: right click.
-- Index and middle extended and close: scroll by moving the hand vertically.
+- **Move:** hold only the index finger up; curl middle, ring, and pinky. Move your hand left/right to move the pointer left/right (horizontal inversion is enabled by default and configurable).
+- **Left click/drag:** with middle, ring, and pinky curled, pinch thumb to index. Keep the pinch closed and move to drag; separate thumb and index to release. Avoid holding a pinch if you only intend to move.
+- **Right click:** keep index raised and touch thumb to middle finger. This is a single click per pinch; release and pinch again for another click.
+- **Scroll:** extend index and middle close together, curl ring and pinky, and keep thumb separated from both tips. Move the pair up/down; the right-click pinch takes precedence if thumb touches middle.
 - Thumb/index pinch with the other three fingers extended: zoom by expanding/contracting pinch distance.
 
 Gesture recognition depends on camera angle, lighting, and individual hand anatomy. Tune pinch threshold, scroll deadzone, camera and smoothing under tray → Settings. Use the tray pause action before typing sensitive text.

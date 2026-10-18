@@ -92,6 +92,7 @@ class GestureFlowApp:
         dialog=SettingsDialog(self.cfg,self.manager)
         if dialog.exec():
             self.cfg=self.manager.data
+            self.tracker.invert_cursor_x = bool(self.cfg.get("invert_cursor_x", True))
             self.engine=GestureEngine(self.cfg,self.tracker,self.controller)
             if self.camera.camera_id != self.cfg["camera_id"] or self.camera.fps != self.cfg["camera_fps"]: self.start_camera()
             self.overlay.setVisible(self.cfg["show_overlay"])
