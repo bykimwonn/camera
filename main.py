@@ -32,7 +32,7 @@ class GestureFlowApp:
         if self.cfg.get("show_overlay",True): self.overlay.show()
         self.camera=None
         self.frame_timer = QTimer()
-        self.frame_timer.setInterval(40)  # Process at most 25 frames/s on laptop CPUs.
+        self.frame_timer.setInterval(50)  # Cap inference to 20 FPS; capture still drops stale frames.
         self.frame_timer.timeout.connect(self.process_latest_frame)
         self.frame_timer.start()
         self.tray=TrayController({"toggle":self.toggle,"overlay":self.toggle_overlay,"settings":self.settings,"calibrate":self.calibrate,"exit":self.shutdown})
@@ -80,6 +80,7 @@ class GestureFlowApp:
         mode=self.engine.process(landmarks)
         self.engine.motion_diagnostics.record(
             "frame", mode=mode, hand_detected=landmarks is not None,
+            frame_size=[int(rgb.shape[1]), int(rgb.shape[0])],
             processing_ms=round((time.perf_counter() - started) * 1000, 2),
         )
         if self.overlay.isVisible(): self.overlay.update_frame(annotated,mode)
@@ -100,7 +101,9 @@ class GestureFlowApp:
             self.cfg=self.manager.data
             self.tracker.invert_cursor_x = bool(self.cfg.get("invert_cursor_x", True))
             self.tracker.margin = float(self.cfg.get("camera_margin", .20))
+            diagnostics = self.engine.motion_diagnostics
             self.engine=GestureEngine(self.cfg,self.tracker,self.controller)
+            self.engine.motion_diagnostics = diagnostics
             if self.camera.camera_id != self.cfg["camera_id"] or self.camera.fps != self.cfg["camera_fps"]: self.start_camera()
             self.overlay.setVisible(self.cfg["show_overlay"])
 
@@ -115,6 +118,7 @@ class GestureFlowApp:
         if getattr(self,"_mouse_listener",None): self._mouse_listener.stop()
         if getattr(self,"controller",None): self.controller.close()
         if getattr(self,"tracker",None): self.tracker.close()
+        if getattr(self,"engine",None): self.engine.motion_diagnostics.close()
         if getattr(self,"tray",None): self.tray.hide()
         if getattr(self,"app",None): self.app.quit()
 

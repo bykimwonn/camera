@@ -52,7 +52,9 @@ class CameraWorker(QThread):
                         cap = None
                         continue
                     failures = 0
-                    self.camera_status.emit(True, "Camera connected")
+                    source_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    source_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    self.camera_status.emit(True, f"Camera connected ({source_w}x{source_h})")
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     failures += 1
@@ -61,6 +63,13 @@ class CameraWorker(QThread):
                     cap = None
                     self.msleep(min(3000, 250 * failures))
                     continue
+                # Some Windows camera drivers ignore requested dimensions. Cap pixels here
+                # anyway so inference load remains predictable on laptop CPUs.
+                source_h, source_w = frame.shape[:2]
+                scale = min(1.0, self.width / source_w, self.height / source_h)
+                if scale < 1.0:
+                    target = (max(1, int(source_w * scale)), max(1, int(source_h * scale)))
+                    frame = cv2.resize(frame, target, interpolation=cv2.INTER_AREA)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 with self._frame_lock:
                     # A one-frame mailbox prevents queued Qt signals from growing without bound.
