@@ -9,12 +9,13 @@ from typing import Any
 DEFAULTS: dict[str, Any] = {
     "camera_id": 0, "camera_fps": 30, "camera_width": 640, "camera_height": 480, "smoothing_factor": 0.35,
     "one_euro_filter_enabled": True, "one_euro_min_cutoff": 1.0, "one_euro_beta": 0.007,
-    "click_distance_threshold": 0.035, "double_click_interval_ms": 300,
-    "scroll_sensitivity": 120, "scroll_deadzone_y": 0.08, "zoom_threshold_delta": 0.02,
+    "click_distance_threshold": 0.045, "click_release_hysteresis": 1.35,
+    "left_drag_hold_ms": 450, "double_click_interval_ms": 300,
+    "scroll_sensitivity": 120, "scroll_deadzone_y": 0.025, "zoom_threshold_delta": 0.012,
     "active_hand": "Right", "invert_cursor_x": True, "scroll_pair_distance_threshold": 0.10, "show_overlay": True, "overlay_position": [20, 20],
     "overlay_size": [320, 240], "fail_safe_corner": True,
     "min_detection_confidence": 0.75, "min_tracking_confidence": 0.75,
-    "camera_margin": 0.15, "enabled": True,
+    "camera_margin": 0.20, "enabled": True,
 }
 
 
