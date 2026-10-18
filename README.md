@@ -14,7 +14,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Allow camera access in Windows privacy settings. Defaults are tuned for mid-range laptop CPUs (640×480 capture, 30 FPS, MediaPipe's lightweight model); the 2 GB GPU is not required. GestureFlow starts in the notification area; use its tray menu to pause, show/hide the HUD, adjust settings, or exit. Close via the tray menu rather than killing the process so any held mouse button is released. The default camera mapping reserves a 20% border on each side; Settings → Control → `Cursor reach` changes the physical movement range (higher values require less hand travel). Settings → Gestures adjusts the scroll deadzone and drag hold delay.
+Allow camera access in Windows privacy settings. Defaults are tuned for mid-range laptop CPUs (640×480 capture, 30 FPS, MediaPipe's lightweight model); the 2 GB GPU is not required. GestureFlow starts in the notification area; use its tray menu to pause, show/hide the HUD, adjust settings, or exit. Close via the tray menu rather than killing the process so any held mouse button is released. The default camera mapping reserves a 20% border on each side; Settings → Control → `Cursor reach` changes the physical movement range (higher values require less hand travel). Settings → Control → `Jitter deadband` suppresses tiny cursor tremors (start at 6 px; increase to 8–10 px if it still shakes, decrease if small cursor movements feel ignored). A lower `Filter cutoff` steadies the cursor but adds lag; increase `Filter response` to reduce lag during fast movements.
 
 ## Gestures
 

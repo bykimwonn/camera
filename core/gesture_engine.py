@@ -12,7 +12,9 @@ class GestureEngine:
     def __init__(self, config: dict[str, Any], tracker: Any, controller: Any) -> None:
         self.cfg, self.tracker, self.io = config, tracker, controller
         self.ema = EMAFilter(float(config.get("smoothing_factor", .35)))
-        self.euro = OneEuroFilter(float(config.get("one_euro_min_cutoff", 1)), float(config.get("one_euro_beta", .007)))
+        self.euro = OneEuroFilter(float(config.get("one_euro_min_cutoff", .7)), float(config.get("one_euro_beta", .015)))
+        self.cursor_deadband_px = max(0.0, float(config.get("cursor_deadband_px", 4.0)))
+        self.cursor_position: np.ndarray | None = None
         self.left_pinching = False
         self.left_dragging = False
         self.left_pinch_started: float | None = None
@@ -39,7 +41,14 @@ class GestureEngine:
             point = self.euro.filter(np.array(raw, dtype=float), now)
         else:
             point = self.ema.filter(np.array(raw, dtype=float))
-        self.io.move(int(point[0]), int(point[1]))
+        if not np.all(np.isfinite(point)):
+            return
+        if self.cursor_position is not None:
+            delta = point - self.cursor_position
+            if float(np.linalg.norm(delta)) < self.cursor_deadband_px:
+                return
+        self.cursor_position = np.asarray(point, dtype=float).copy()
+        self.io.move(int(round(point[0])), int(round(point[1])))
 
     def _cancel_left_pinch(self) -> None:
         if self.left_dragging:
