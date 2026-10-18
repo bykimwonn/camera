@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any
+import cv2
 import numpy as np
 import pyautogui
 
@@ -24,10 +25,24 @@ class HandTracker:
         self.screen_w, self.screen_h = pyautogui.size()
         self.margin = float(config.get("camera_margin", .15))
         self.invert_cursor_x = bool(config.get("invert_cursor_x", True))
+        self.low_light_enhancement = bool(config.get("low_light_enhancement", True))
+        self._low_light_clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         self.logger = logging.getLogger("gestureflow.tracking")
+
+    def _enhance_dim_frame(self, rgb: np.ndarray) -> np.ndarray:
+        """Apply mild CLAHE to luminance only when the frame is actually dim."""
+        if not self.low_light_enhancement:
+            return rgb
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        if float(np.mean(gray)) >= 95.0:
+            return rgb
+        lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+        lab[:, :, 0] = self._low_light_clahe.apply(lab[:, :, 0])
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
     def process(self, rgb: np.ndarray) -> tuple[dict[int, np.ndarray] | None, np.ndarray]:
         try:
+            rgb = self._enhance_dim_frame(rgb)
             rgb.flags.writeable = False
             result = self.hands.process(rgb)
             rgb.flags.writeable = True

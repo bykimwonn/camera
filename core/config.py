@@ -13,10 +13,11 @@ DEFAULTS: dict[str, Any] = {
     "click_distance_threshold": 0.045, "click_release_hysteresis": 1.35,
     "left_drag_hold_ms": 450, "double_click_interval_ms": 300,
     "scroll_sensitivity": 120, "scroll_deadzone_y": 0.025, "zoom_threshold_delta": 0.012,
-    "active_hand": "Right", "invert_cursor_x": True, "scroll_pair_distance_threshold": 0.10, "show_overlay": True, "overlay_position": [20, 20],
-    "overlay_size": [320, 240], "fail_safe_corner": True,
-    "min_detection_confidence": 0.75, "min_tracking_confidence": 0.75,
-    "camera_margin": 0.20, "motion_diagnostics": True, "enabled": True,
+    "active_hand": "Right", "invert_cursor_x": True, "scroll_pair_distance_threshold": 0.10, "show_overlay": False,
+    "overlay_position": [20, 20], "overlay_size": [320, 240], "fail_safe_corner": True,
+    "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
+    "camera_margin": 0.20, "motion_diagnostics": True,
+    "face_verification_enabled": True, "face_match_threshold": 75.0, "config_version": 2, "enabled": True,
 }
 
 
@@ -32,10 +33,17 @@ class ConfigManager:
             if self.path.exists():
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
-                    # The previous shipped default (6 px) still allowed visible cursor
-                    # tremor on high-DPI laptop screens; migrate only that untouched default.
-                    if loaded.get("cursor_deadband_px") == 6.0:
-                        loaded["cursor_deadband_px"] = DEFAULTS["cursor_deadband_px"]
+                    # Apply one-time defaults migration without overriding later user choices.
+                    try:
+                        old_version = int(loaded.get("config_version", 0))
+                    except (TypeError, ValueError):
+                        old_version = 0
+                    if old_version < 2:
+                        if loaded.get("cursor_deadband_px") == 6.0:
+                            loaded["cursor_deadband_px"] = DEFAULTS["cursor_deadband_px"]
+                        if loaded.get("show_overlay") is True:
+                            loaded["show_overlay"] = False
+                        loaded["config_version"] = 2
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)
