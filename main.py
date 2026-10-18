@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys, logging
 import numpy as np
 from pynput import keyboard, mouse
-from PyQt6.QtCore import Qt, QObject, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 from core.config import ConfigManager
@@ -31,6 +31,10 @@ class GestureFlowApp:
         self.overlay=HudOverlay(self.cfg["overlay_position"],self.cfg["overlay_size"])
         if self.cfg.get("show_overlay",True): self.overlay.show()
         self.camera=None
+        self.frame_timer = QTimer()
+        self.frame_timer.setInterval(40)  # Process at most 25 frames/s on laptop CPUs.
+        self.frame_timer.timeout.connect(self.process_latest_frame)
+        self.frame_timer.start()
         self.tray=TrayController({"toggle":self.toggle,"overlay":self.toggle_overlay,"settings":self.settings,"calibrate":self.calibrate,"exit":self.shutdown})
         self.emergency=EmergencySignals(); self.emergency.pause_requested.connect(self.toggle)
         self._hotkey=keyboard.GlobalHotKeys({'<ctrl>+<shift>+<esc>': self.emergency.pause_requested.emit})
@@ -53,9 +57,18 @@ class GestureFlowApp:
 
     def start_camera(self) -> None:
         if self.camera:
-            self.camera.frame_ready.disconnect(); self.camera.stop()
+            self.camera.stop()
         self.camera=CameraWorker(int(self.cfg["camera_id"]),int(self.cfg["camera_fps"]),int(self.cfg["camera_width"]),int(self.cfg["camera_height"]))
-        self.camera.frame_ready.connect(self.on_frame); self.camera.camera_status.connect(self.on_status); self.camera.start()
+        self.camera.camera_status.connect(self.on_status); self.camera.start()
+
+    def process_latest_frame(self) -> None:
+        """Consume only the newest camera frame; never queue an unbounded frame backlog."""
+        camera = self.camera
+        if camera is None or not camera.isRunning():
+            return
+        frame = camera.take_latest_frame()
+        if frame is not None:
+            self.on_frame(frame)
 
     def on_status(self, ok: bool, message: str) -> None:
         self.tray.showMessage("GestureFlow",message,QSystemTrayIcon.MessageIcon.Information if ok else QSystemTrayIcon.MessageIcon.Warning,3000)
@@ -88,6 +101,7 @@ class GestureFlowApp:
         self.tray.showMessage("GestureFlow",f"Calibration ready. Current camera margin: {self.tracker.margin:.0%}")
 
     def shutdown(self) -> None:
+        if getattr(self, "frame_timer", None): self.frame_timer.stop()
         if getattr(self,"camera",None): self.camera.stop(); self.camera=None
         if getattr(self,"_hotkey",None): self._hotkey.stop()
         if getattr(self,"_mouse_listener",None): self._mouse_listener.stop()

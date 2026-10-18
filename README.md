@@ -4,7 +4,7 @@ GestureFlow is a Windows 10/11 x64 desktop utility for webcam-based cursor navig
 
 ## Install and run
 
-Use 64-bit Python 3.10–3.12. In PowerShell from this directory:
+Use 64-bit Python 3.10–3.12 (Python 3.11 is recommended). MediaPipe is pinned to 0.10.21 because newer releases in the 0.10 series removed the `mp.solutions` API used by this application. In PowerShell from this directory:
 
 ```powershell
 py -3.11 -m venv .venv
@@ -38,4 +38,4 @@ The directory distribution is written to `dist\\GestureFlow`. Keep the adjacent 
 
 ## Engineering notes
 
-Camera reads run on a stoppable `QThread` with retry/backoff and status notifications. Landmark processing and input synthesis run on the Qt thread, avoiding cross-thread MediaPipe and controller access. OS operations are guarded and the left button is released on pause, hand loss, and shutdown. Configuration load tolerates missing or malformed files and writes use atomic replacement. Emergency pause is available with Ctrl+Shift+Esc or by moving the pointer to the top-left screen corner; the corner trigger rearms after the pointer leaves.
+Camera reads run on a stoppable `QThread` with retry/backoff and status notifications. A lock-protected one-frame mailbox drops stale camera frames; a Qt timer consumes only the newest image at up to 25 FPS, preventing queued frame signals from accumulating when inference is slower than capture. Landmark processing and input synthesis run on the Qt thread, avoiding cross-thread MediaPipe and controller access. OS operations are guarded and the left button is released on pause, hand loss, and shutdown. Configuration load tolerates missing or malformed files and writes use atomic replacement. Emergency pause is available with Ctrl+Shift+Esc or by moving the pointer to the top-left screen corner; the corner trigger rearms after the pointer leaves.
