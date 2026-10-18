@@ -1,14 +1,13 @@
 """Asynchronous camera reader. Frames are immutable RGB arrays emitted to Qt."""
 from __future__ import annotations
 import logging
-import time
+import threading
 import cv2
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
 class CameraWorker(QThread):
     """Capture thread with bounded retry/backoff and cooperative shutdown."""
-    frame_ready = pyqtSignal(object)
     camera_status = pyqtSignal(bool, str)
 
     def __init__(self, camera_id: int = 0, fps: int = 30, width: int = 640, height: int = 480) -> None:
@@ -16,7 +15,16 @@ class CameraWorker(QThread):
         self.camera_id, self.fps = camera_id, max(1, fps)
         self.width, self.height = max(320, width), max(240, height)
         self._running = True
+        self._frame_lock = threading.Lock()
+        self._latest_frame = None
         self.logger = logging.getLogger("gestureflow.capture")
+
+    def take_latest_frame(self):
+        """Return and clear the newest frame; stale frames are intentionally dropped."""
+        with self._frame_lock:
+            frame = self._latest_frame
+            self._latest_frame = None
+            return frame
 
     def stop(self) -> None:
         self._running = False
@@ -53,7 +61,10 @@ class CameraWorker(QThread):
                     cap = None
                     self.msleep(min(3000, 250 * failures))
                     continue
-                self.frame_ready.emit(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                with self._frame_lock:
+                    # A one-frame mailbox prevents queued Qt signals from growing without bound.
+                    self._latest_frame = rgb
             except Exception as exc:
                 self.logger.exception("Camera capture error: %s", exc)
                 self.camera_status.emit(False, str(exc))

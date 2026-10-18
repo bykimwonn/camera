@@ -11,6 +11,11 @@ class HandTracker:
     """Wrap MediaPipe Hands; methods execute on the GUI/processing thread."""
     def __init__(self, config: dict[str, Any]) -> None:
         import mediapipe as mp
+        if not hasattr(mp, "solutions"):
+            raise RuntimeError(
+                f"MediaPipe {getattr(mp, '__version__', 'unknown')} lacks the legacy solutions API. "
+                "Install the supported version with: python -m pip install mediapipe==0.10.21"
+            )
         self.mp = mp
         self.hands = mp.solutions.hands.Hands(static_image_mode=False, max_num_hands=1,
             model_complexity=0, min_detection_confidence=float(config.get("min_detection_confidence", .75)),
