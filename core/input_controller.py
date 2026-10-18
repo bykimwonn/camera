@@ -33,6 +33,11 @@ class InputController:
             except Exception: self.logger.exception("Left release failed")
             finally: self.left_held = False
 
+    def click_left(self) -> None:
+        """Dispatch one left click without creating a held drag state."""
+        try: self.mouse.click(Button.left)
+        except Exception: self.logger.exception("Left click failed")
+
     def click_right(self) -> None:
         try: self.mouse.click(Button.right)
         except Exception: self.logger.exception("Right click failed")

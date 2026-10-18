@@ -14,15 +14,16 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Allow camera access in Windows privacy settings. Defaults are tuned for mid-range laptop CPUs (640×480 capture, 30 FPS, MediaPipe's lightweight model); the 2 GB GPU is not required. GestureFlow starts in the notification area; use its tray menu to pause, show/hide the HUD, adjust settings, or exit. Close via the tray menu rather than killing the process so any held mouse button is released. The default camera mapping reserves a 15% border on each side.
+Allow camera access in Windows privacy settings. Defaults are tuned for mid-range laptop CPUs (640×480 capture, 30 FPS, MediaPipe's lightweight model); the 2 GB GPU is not required. GestureFlow starts in the notification area; use its tray menu to pause, show/hide the HUD, adjust settings, or exit. Close via the tray menu rather than killing the process so any held mouse button is released. The default camera mapping reserves a 20% border on each side; Settings → Control → `Cursor reach` changes the physical movement range (higher values require less hand travel). Settings → Gestures adjusts the scroll deadzone and drag hold delay.
 
 ## Gestures
 
 - **Move:** hold only the index finger up; curl middle, ring, and pinky. Move your hand left/right to move the pointer left/right (horizontal inversion is enabled by default and configurable).
-- **Left click/drag:** with middle, ring, and pinky curled, pinch thumb to index. Keep the pinch closed and move to drag; separate thumb and index to release. Avoid holding a pinch if you only intend to move.
-- **Right click:** keep index raised and touch thumb to middle finger. This is a single click per pinch; release and pinch again for another click.
-- **Scroll:** extend index and middle close together, curl ring and pinky, and keep thumb separated from both tips. Move the pair up/down; the right-click pinch takes precedence if thumb touches middle.
-- Thumb/index pinch with the other three fingers extended: zoom by expanding/contracting pinch distance.
+- **Left click:** with middle, ring, and pinky curled, briefly touch thumb to index, then release. A short pinch is a click; it does not hold the mouse button.
+- **Drag:** start the same thumb/index pinch and hold it for the configured delay (450 ms by default). Once the HUD says `DRAGGING`, move; separate thumb and index to release. Releasing before the delay clicks instead.
+- **Right click:** raise index and touch thumb to middle. Release fully before another right click; it fires once per pinch.
+- **Scroll:** extend index and middle close together, curl ring and pinky, and keep the thumb away from both fingertips. Pause briefly to establish the anchor, then move the pair a small distance up/down. Deadzone and sensitivity are adjustable.
+- **Zoom:** extend middle, ring, and pinky, then bring thumb and index close together to arm zoom. Keep the three fingers extended and open/close the thumb-index gap to zoom in/out.
 
 Gesture recognition depends on camera angle, lighting, and individual hand anatomy. Tune pinch threshold, scroll deadzone, camera and smoothing under tray → Settings. Use the tray pause action before typing sensitive text.
 
