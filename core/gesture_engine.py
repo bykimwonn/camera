@@ -2,6 +2,7 @@
 from __future__ import annotations
 import math
 import time
+from collections import deque
 from typing import Any
 import numpy as np
 from utils.smoothing import EMAFilter, OneEuroFilter
@@ -16,6 +17,8 @@ class GestureEngine:
         self.euro = OneEuroFilter(float(config.get("one_euro_min_cutoff", .7)), float(config.get("one_euro_beta", .015)))
         self.cursor_deadband_px = max(0.0, float(config.get("cursor_deadband_px", 4.0)))
         self.cursor_position: np.ndarray | None = None
+        self.cursor_samples: deque[np.ndarray] = deque(maxlen=3)
+        self._cursor_mode: str | None = None
         self.motion_diagnostics = MotionDiagnostics(bool(config.get("motion_diagnostics", True)))
         self.left_pinching = False
         self.left_dragging = False
@@ -39,10 +42,18 @@ class GestureEngine:
 
     def _move_cursor(self, lm: dict[int, np.ndarray], now: float, mode: str) -> None:
         raw = self.tracker.map_to_screen(lm[8])
+        # Reset the short robust window when switching navigation/drag modes so
+        # stale samples from the previous pose cannot tug the pointer.
+        if mode != self._cursor_mode:
+            self.cursor_samples.clear()
+            self.ema.reset(); self.euro.reset()
+            self._cursor_mode = mode
+        self.cursor_samples.append(np.asarray(raw, dtype=float))
+        median_input = np.median(np.stack(self.cursor_samples), axis=0)
         if self.cfg.get("one_euro_filter_enabled", True):
-            point = self.euro.filter(np.array(raw, dtype=float), now)
+            point = self.euro.filter(median_input, now)
         else:
-            point = self.ema.filter(np.array(raw, dtype=float))
+            point = self.ema.filter(median_input)
         if not np.all(np.isfinite(point)):
             self.motion_diagnostics.record("invalid_motion", mode=mode)
             return
@@ -53,6 +64,7 @@ class GestureEngine:
             "cursor_sample", mode=mode,
             hand_tip_norm=[round(float(lm[8][0]), 5), round(float(lm[8][1]), 5)],
             mapped_raw_px=[int(raw[0]), int(raw[1])],
+            median_input_px=[round(float(v), 2) for v in median_input],
             filtered_px=[round(float(point[0]), 2), round(float(point[1]), 2)],
             stable_cursor_px=[round(float(v), 2) for v in previous] if previous is not None else None,
             cursor_delta_px=round(delta, 2) if delta is not None else None,
@@ -78,6 +90,8 @@ class GestureEngine:
             self.right_pinched = self.zoom_active = False
             self._cancel_left_pinch()
             self.ema.reset(); self.euro.reset()
+            self.cursor_samples.clear()
+            self._cursor_mode = None
             return self.mode
 
         index = self._extended(lm, 8, 6)
