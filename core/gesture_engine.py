@@ -5,6 +5,7 @@ import time
 from typing import Any
 import numpy as np
 from utils.smoothing import EMAFilter, OneEuroFilter
+from utils.diagnostics import MotionDiagnostics
 
 
 class GestureEngine:
@@ -15,6 +16,7 @@ class GestureEngine:
         self.euro = OneEuroFilter(float(config.get("one_euro_min_cutoff", .7)), float(config.get("one_euro_beta", .015)))
         self.cursor_deadband_px = max(0.0, float(config.get("cursor_deadband_px", 4.0)))
         self.cursor_position: np.ndarray | None = None
+        self.motion_diagnostics = MotionDiagnostics(bool(config.get("motion_diagnostics", True)))
         self.left_pinching = False
         self.left_dragging = False
         self.left_pinch_started: float | None = None
@@ -35,18 +37,30 @@ class GestureEngine:
         """Estimate extension from tip/PIP y positions in normalized image space."""
         return lm[tip][1] < lm[pip][1] - 0.015
 
-    def _move_cursor(self, lm: dict[int, np.ndarray], now: float) -> None:
+    def _move_cursor(self, lm: dict[int, np.ndarray], now: float, mode: str) -> None:
         raw = self.tracker.map_to_screen(lm[8])
         if self.cfg.get("one_euro_filter_enabled", True):
             point = self.euro.filter(np.array(raw, dtype=float), now)
         else:
             point = self.ema.filter(np.array(raw, dtype=float))
         if not np.all(np.isfinite(point)):
+            self.motion_diagnostics.record("invalid_motion", mode=mode)
             return
-        if self.cursor_position is not None:
-            delta = point - self.cursor_position
-            if float(np.linalg.norm(delta)) < self.cursor_deadband_px:
-                return
+        previous = self.cursor_position.copy() if self.cursor_position is not None else None
+        delta = float(np.linalg.norm(point - previous)) if previous is not None else None
+        dispatched = previous is None or delta >= self.cursor_deadband_px
+        self.motion_diagnostics.record(
+            "cursor_sample", mode=mode,
+            hand_tip_norm=[round(float(lm[8][0]), 5), round(float(lm[8][1]), 5)],
+            mapped_raw_px=[int(raw[0]), int(raw[1])],
+            filtered_px=[round(float(point[0]), 2), round(float(point[1]), 2)],
+            stable_cursor_px=[round(float(v), 2) for v in previous] if previous is not None else None,
+            cursor_delta_px=round(delta, 2) if delta is not None else None,
+            filter_offset_px=round(float(np.linalg.norm(point - np.asarray(raw, dtype=float))), 2),
+            deadband_px=self.cursor_deadband_px, sent_to_os=dispatched,
+        )
+        if not dispatched:
+            return
         self.cursor_position = np.asarray(point, dtype=float).copy()
         self.io.move(int(round(point[0])), int(round(point[1])))
 
@@ -151,7 +165,7 @@ class GestureEngine:
                     self.left_dragging = True
             if self.left_pinching:
                 if self.left_dragging:
-                    self._move_cursor(lm, now)
+                    self._move_cursor(lm, now, "DRAGGING")
                     self.mode = "DRAGGING"
                 else:
                     self.mode = "CLICK READY"
@@ -166,7 +180,7 @@ class GestureEngine:
 
         # 5) Move with index alone. Screen mapping is calibrated and smoothed.
         if index and not middle and not ring and not pinky:
-            self._move_cursor(lm, now)
+            self._move_cursor(lm, now, "NAVIGATING")
             self.mode = "NAVIGATING"
         else:
             self.mode = "IDLE"

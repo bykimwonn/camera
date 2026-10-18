@@ -27,6 +27,20 @@ Allow camera access in Windows privacy settings. Defaults are tuned for mid-rang
 
 Gesture recognition depends on camera angle, lighting, and individual hand anatomy. Tune pinch threshold, scroll deadzone, camera and smoothing under tray → Settings. Use the tray pause action before typing sensitive text.
 
+## Capture a debug session (Windows)
+
+Run `run-debug.ps1` from PowerShell or double-click `run-debug.cmd` from Command Prompt/the Explorer. The script launches the app and saves the combined console/error output as `%USERPROFILE%\\.gestureflow\\session-<timestamp>.txt`. GestureFlow also writes `motion.jsonl` (timestamped hand-tip coordinates, mapped and filtered cursor positions, movement delta, jitter deadband, whether each sample reached the OS, gesture/frame state) plus the rotating `gestureflow.log` error log in `%USERPROFILE%\\.gestureflow`. No camera frames or images are recorded. Cursor coordinates can reveal screen activity; review the files before sharing.
+
+After closing the app, show the latest session and motion samples in PowerShell:
+
+```powershell
+Get-Content (Get-ChildItem "$HOME\\.gestureflow\\session-*.txt" | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName -Tail 200
+Get-Content "$HOME\\.gestureflow\\motion.jsonl" -Tail 200
+Get-Content "$HOME\\.gestureflow\\gestureflow.log" -Tail 200
+```
+
+Copy the relevant output and paste it into the debugging chat. Motion samples rotate automatically to bound disk use.
+
 ## Build portable Windows executable
 
 From a clean Windows x64 environment with dependencies installed:
