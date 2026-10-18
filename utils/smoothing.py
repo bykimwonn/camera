@@ -47,10 +47,18 @@ class OneEuroFilter:
             self._dx = np.zeros_like(x)
             return x.copy()
         dt = float(np.clip(timestamp - self._last_t, 1e-4, 0.25))
+        if x.shape != self._last_x.shape:
+            self.reset()
+            self._last_x, self._last_t = x.copy(), timestamp
+            self._dx = np.zeros_like(x)
+            return x.copy()
         derivative = (x - self._last_x) / dt
         ad = self._alpha(self.derivative_cutoff, dt)
         self._dx = ad * derivative + (1 - ad) * self._dx
+        # Per-axis cutoff prevents motion on one axis from passing jitter on the other.
         cutoff = self.min_cutoff + self.beta * np.abs(self._dx)
-        filtered = self._alpha(float(np.mean(cutoff)), dt) * x + (1 - self._alpha(float(np.mean(cutoff)), dt)) * self._last_x
+        tau = 1.0 / (2 * math.pi * cutoff)
+        alpha = 1.0 / (1.0 + tau / dt)
+        filtered = alpha * x + (1 - alpha) * self._last_x
         self._last_x, self._last_t = filtered.copy(), timestamp
         return filtered

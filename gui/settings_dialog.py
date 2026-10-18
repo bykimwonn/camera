@@ -19,7 +19,10 @@ class SettingsDialog(QDialog):
         self.overlay = QCheckBox(); self.overlay.setChecked(config["show_overlay"])
         self.invert_x = QCheckBox(); self.invert_x.setChecked(config.get("invert_cursor_x", True))
         self.camera_margin = QDoubleSpinBox(); self.camera_margin.setRange(.05,.35); self.camera_margin.setSingleStep(.025); self.camera_margin.setValue(config.get("camera_margin", .20))
-        for label, widget in [("Camera device", self.camera),("Camera FPS",self.fps),("Scroll sensitivity",self.sensitivity),("EMA smoothing",self.smoothing),("Pinch threshold",self.pinch),("Use One Euro filter",self.one_euro),("Show HUD",self.overlay),("Invert horizontal cursor",self.invert_x),("Cursor reach (higher = less hand travel)", self.camera_margin)]: form.addRow(label,widget)
+        self.jitter = QDoubleSpinBox(); self.jitter.setRange(0,20); self.jitter.setSingleStep(1); self.jitter.setSuffix(" px"); self.jitter.setValue(config.get("cursor_deadband_px", 6.0))
+        self.min_cutoff = QDoubleSpinBox(); self.min_cutoff.setRange(.2,3.0); self.min_cutoff.setSingleStep(.1); self.min_cutoff.setValue(config.get("one_euro_min_cutoff", .7))
+        self.beta = QDoubleSpinBox(); self.beta.setRange(0,.1); self.beta.setSingleStep(.005); self.beta.setValue(config.get("one_euro_beta", .015))
+        for label, widget in [("Camera device", self.camera),("Camera FPS",self.fps),("Scroll sensitivity",self.sensitivity),("EMA smoothing",self.smoothing),("Pinch threshold",self.pinch),("Use One Euro filter",self.one_euro),("Filter cutoff (lower = steadier/slower)",self.min_cutoff),("Filter response (higher = less lag)",self.beta),("Show HUD",self.overlay),("Invert horizontal cursor",self.invert_x),("Cursor reach (higher = less hand travel)", self.camera_margin),("Jitter deadband (higher = steadier)", self.jitter)]: form.addRow(label,widget)
         tabs.addTab(general,"Control")
         advanced = QWidget(); af = QFormLayout(advanced)
         self.deadzone = QDoubleSpinBox(); self.deadzone.setRange(.01,.3); self.deadzone.setSingleStep(.01); self.deadzone.setValue(config["scroll_deadzone_y"])
@@ -32,5 +35,5 @@ class SettingsDialog(QDialog):
         layout=QVBoxLayout(self); layout.addWidget(tabs); layout.addWidget(self.status); layout.addWidget(save)
 
     def save(self) -> None:
-        self.manager.save({"camera_id":self.camera.value(),"camera_fps":self.fps.value(),"scroll_sensitivity":self.sensitivity.value(),"smoothing_factor":self.smoothing.value(),"click_distance_threshold":self.pinch.value(),"one_euro_filter_enabled":self.one_euro.isChecked(),"show_overlay":self.overlay.isChecked(),"invert_cursor_x":self.invert_x.isChecked(),"camera_margin":self.camera_margin.value(),"left_drag_hold_ms":self.drag_hold.value(),"scroll_deadzone_y":self.deadzone.value(),"scroll_pair_distance_threshold":self.scroll_pair.value(),"zoom_threshold_delta":self.zoom.value()})
+        self.manager.save({"camera_id":self.camera.value(),"camera_fps":self.fps.value(),"scroll_sensitivity":self.sensitivity.value(),"smoothing_factor":self.smoothing.value(),"click_distance_threshold":self.pinch.value(),"one_euro_filter_enabled":self.one_euro.isChecked(),"one_euro_min_cutoff":self.min_cutoff.value(),"one_euro_beta":self.beta.value(),"show_overlay":self.overlay.isChecked(),"invert_cursor_x":self.invert_x.isChecked(),"camera_margin":self.camera_margin.value(),"cursor_deadband_px":self.jitter.value(),"left_drag_hold_ms":self.drag_hold.value(),"scroll_deadzone_y":self.deadzone.value(),"scroll_pair_distance_threshold":self.scroll_pair.value(),"zoom_threshold_delta":self.zoom.value()})
         self.accept()
