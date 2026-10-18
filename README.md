@@ -39,7 +39,7 @@ Get-Content "$HOME\\.gestureflow\\motion.jsonl" -Tail 200
 Get-Content "$HOME\\.gestureflow\\gestureflow.log" -Tail 200
 ```
 
-Copy the relevant output and paste it into the debugging chat. Motion samples rotate automatically to bound disk use.
+Copy the relevant output and paste it into the debugging chat. Motion samples rotate automatically to bound disk use. Diagnostics are written on a background queue so disk logging does not stall tracking; the camera reader also downsizes frames if a driver ignores the requested 640×480 size. The launcher tolerates Qt's benign `SetProcessDpiAwarenessContext() failed` warning instead of aborting.
 
 ## Build portable Windows executable
 

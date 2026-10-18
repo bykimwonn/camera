@@ -9,7 +9,7 @@ from typing import Any
 DEFAULTS: dict[str, Any] = {
     "camera_id": 0, "camera_fps": 30, "camera_width": 640, "camera_height": 480, "smoothing_factor": 0.35,
     "one_euro_filter_enabled": True, "one_euro_min_cutoff": 0.7, "one_euro_beta": 0.015,
-    "cursor_deadband_px": 6.0,
+    "cursor_deadband_px": 10.0,
     "click_distance_threshold": 0.045, "click_release_hysteresis": 1.35,
     "left_drag_hold_ms": 450, "double_click_interval_ms": 300,
     "scroll_sensitivity": 120, "scroll_deadzone_y": 0.025, "zoom_threshold_delta": 0.012,
@@ -32,6 +32,10 @@ class ConfigManager:
             if self.path.exists():
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
+                    # The previous shipped default (6 px) still allowed visible cursor
+                    # tremor on high-DPI laptop screens; migrate only that untouched default.
+                    if loaded.get("cursor_deadband_px") == 6.0:
+                        loaded["cursor_deadband_px"] = DEFAULTS["cursor_deadband_px"]
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)

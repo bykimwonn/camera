@@ -22,11 +22,16 @@ Write-Host "Cursor samples: $motionLog"
 Write-Host "Application log: $appLog"
 Write-Host 'Use the tray Exit action to stop cleanly. The motion log contains cursor coordinates, not camera images.'
 Push-Location $root
+$previousErrorActionPreference = $ErrorActionPreference
 try {
+    # Qt/MediaPipe write benign warnings to native stderr. Continue rather than
+    # treating those PowerShell error records as a fatal launcher failure.
+    $ErrorActionPreference = 'Continue'
     & $python -u (Join-Path $root 'main.py') 2>&1 | Tee-Object -FilePath $sessionLog
     $appExitCode = $LASTEXITCODE
 }
 finally {
+    $ErrorActionPreference = $previousErrorActionPreference
     Pop-Location
 }
 Write-Host "GestureFlow exited with code $appExitCode. Logs remain in $logDir" -ForegroundColor Yellow
