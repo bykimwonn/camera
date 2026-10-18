@@ -16,7 +16,7 @@ DEFAULTS: dict[str, Any] = {
     "active_hand": "Right", "invert_cursor_x": True, "scroll_pair_distance_threshold": 0.10, "show_overlay": True, "overlay_position": [20, 20],
     "overlay_size": [320, 240], "fail_safe_corner": True,
     "min_detection_confidence": 0.75, "min_tracking_confidence": 0.75,
-    "camera_margin": 0.20, "enabled": True,
+    "camera_margin": 0.20, "motion_diagnostics": True, "enabled": True,
 }
 
 

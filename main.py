@@ -1,6 +1,6 @@
 """GestureFlow Windows desktop entry point."""
 from __future__ import annotations
-import sys, logging
+import sys, logging, time
 import numpy as np
 from pynput import keyboard, mouse
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
@@ -71,11 +71,17 @@ class GestureFlowApp:
             self.on_frame(frame)
 
     def on_status(self, ok: bool, message: str) -> None:
+        self.engine.motion_diagnostics.record("camera_status", connected=ok, message=message)
         self.tray.showMessage("GestureFlow",message,QSystemTrayIcon.MessageIcon.Information if ok else QSystemTrayIcon.MessageIcon.Warning,3000)
 
     def on_frame(self, rgb: np.ndarray) -> None:
+        started = time.perf_counter()
         landmarks, annotated=self.tracker.process(rgb)
         mode=self.engine.process(landmarks)
+        self.engine.motion_diagnostics.record(
+            "frame", mode=mode, hand_detected=landmarks is not None,
+            processing_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
         if self.overlay.isVisible(): self.overlay.update_frame(annotated,mode)
 
     def toggle(self) -> None:
