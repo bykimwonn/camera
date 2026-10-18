@@ -23,6 +23,7 @@ class HandTracker:
         self.drawer = mp.solutions.drawing_utils
         self.screen_w, self.screen_h = pyautogui.size()
         self.margin = float(config.get("camera_margin", .15))
+        self.invert_cursor_x = bool(config.get("invert_cursor_x", True))
         self.logger = logging.getLogger("gestureflow.tracking")
 
     def process(self, rgb: np.ndarray) -> tuple[dict[int, np.ndarray] | None, np.ndarray]:
@@ -44,7 +45,8 @@ class HandTracker:
         """Map normalized camera coordinates into padded screen bounds."""
         x0, x1 = self.margin, 1 - self.margin
         y0, y1 = self.margin, 1 - self.margin
-        x = float(np.interp(point[0], [x0, x1], [0, self.screen_w - 1]))
+        camera_x = 1.0 - float(point[0]) if self.invert_cursor_x else float(point[0])
+        x = float(np.interp(camera_x, [x0, x1], [0, self.screen_w - 1]))
         y = float(np.interp(point[1], [y0, y1], [0, self.screen_h - 1]))
         return int(np.clip(x, 0, self.screen_w - 1)), int(np.clip(y, 0, self.screen_h - 1))
 
