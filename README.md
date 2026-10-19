@@ -14,9 +14,9 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (640×480 capture; the 2 GB GPU is not required). GestureFlow starts in the notification area with the HUD hidden. Settings remain available from the tray.
+Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (640×480 capture; the 2 GB GPU is not required). GestureFlow starts in the notification area with the HUD hidden. Settings remain available from the tray. Choose **Hand gestures** or **Eye gaze** from the tray's Cursor Control Mode submenu; they are mutually exclusive. Hand mode supports cursor, clicks, drag, scroll, and zoom. Eye mode moves the pointer only; use a physical mouse/keyboard for clicks. Eye landmarks are processed locally and are not used for identity recognition.
 
-Tray → Settings lets you select the camera, tune hand detection/tracking confidence, turn on automatic low-light enhancement, show/hide the HUD, and adjust cursor/gesture settings. GestureFlow uses hand tracking only; it does not capture or recognize faces. CLAHE may help dim or IR frames but cannot recover detail in complete darkness. A visible-light camera still needs illumination, and the T480 IR camera must be accessible to OpenCV. The default mapping reserves a 20% border; higher `Cursor reach` means less hand travel but more cursor gain.
+Eye gaze requires one-time nine-point calibration: select tray → Open Settings → Tracking → Calibrate Eye Gaze, then follow each dot while keeping your head still. Calibration is saved in the local configuration. Ordinary laptop webcams can have significant gaze error; IR support varies by driver. If it drifts, recalibrate with better front lighting and raise the Eye gaze jitter deadband. Tray → Settings also lets you select the camera, tune hand detection/tracking confidence, turn on automatic low-light enhancement, show/hide the HUD, and adjust cursor/gesture settings. Hand mode uses hand tracking; Eye mode processes only the eye/iris landmarks needed for gaze and does not identify or recognize people. No camera frames are saved. CLAHE may help dim or IR frames but cannot recover detail in complete darkness. A visible-light camera still needs illumination, and the T480 IR camera must be accessible to OpenCV. The default mapping reserves a 20% border; higher `Cursor reach` means less hand travel but more cursor gain.
 
 ## Gestures
 
@@ -31,7 +31,7 @@ Gesture recognition depends on camera angle, lighting, and individual hand anato
 
 ## Capture a debug session (Windows)
 
-Run `run-debug.ps1` from PowerShell or double-click `run-debug.cmd` from Command Prompt/the Explorer. The script launches the app and saves the combined console/error output as `%USERPROFILE%\\.gestureflow\\session-<timestamp>.txt`. GestureFlow also writes `motion.jsonl` (timestamped hand-tip coordinates, mapped and filtered cursor positions, movement delta, jitter deadband, whether each sample reached the OS, gesture/frame state) plus the rotating `gestureflow.log` error log in `%USERPROFILE%\\.gestureflow`. No camera frames or images are recorded. Cursor coordinates can reveal screen activity; review the files before sharing.
+Run `run-debug.ps1` from PowerShell or double-click `run-debug.cmd` from Command Prompt/the Explorer. The script launches the app and saves the combined console/error output as `%USERPROFILE%\\.gestureflow\\session-<timestamp>.txt`. GestureFlow also writes `motion.jsonl` (timestamped hand-tip or eye-gaze cursor samples, mapped and filtered cursor positions, movement delta, jitter deadband, whether each sample reached the OS, gesture/frame state) plus the rotating `gestureflow.log` error log in `%USERPROFILE%\\.gestureflow`. No camera frames or images are recorded. Cursor coordinates can reveal screen activity; review the files before sharing.
 
 After closing the app, show the latest session and motion samples in PowerShell:
 
@@ -48,10 +48,10 @@ Copy the relevant output and paste it into the debugging chat. Motion samples ro
 From a clean Windows x64 environment with dependencies installed:
 
 ```powershell
-pyinstaller --noconfirm --onedir --windowed --name GestureFlow --collect-all mediapipe --collect-all cv2 --collect-all PyQt6 main.py
+pyinstaller --noconfirm --clean --onedir --windowed --name GestureFlow --icon assets\gestureflow.ico --add-data "assets;assets" --collect-all mediapipe --collect-all cv2 --collect-all PyQt6 main.py
 ```
 
-The directory distribution is written to `dist\\GestureFlow`. Keep the adjacent runtime files together. Camera drivers and Windows camera privacy permissions are still required.
+The directory distribution is written to `dist\\GestureFlow`. Keep the adjacent runtime files together. The executable and tray use the included GestureFlow eye/cursor icon. To pin it, open `dist\\GestureFlow\\GestureFlow.exe` in File Explorer, right-click it, and choose **Pin to taskbar** (or **Show more options → Pin to taskbar**). The frozen app stores settings under `%USERPROFILE%\\.gestureflow\\config.json`, so calibration survives moving the distribution folder. Camera drivers and Windows camera privacy permissions are still required.
 
 ## Engineering notes
 

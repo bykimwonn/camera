@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ DEFAULTS: dict[str, Any] = {
     "overlay_position": [20, 20], "overlay_size": [320, 240], "fail_safe_corner": True,
     "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
     "camera_margin": 0.20, "motion_diagnostics": True,
+    "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 18.0,
     "config_version": 2, "enabled": True,
 }
 
@@ -24,7 +26,9 @@ DEFAULTS: dict[str, Any] = {
 class ConfigManager:
     """Loads defaults, tolerates corrupt files, and atomically persists updates."""
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or Path(__file__).resolve().parents[1] / "config.json"
+        default_path = (Path.home() / ".gestureflow" / "config.json" if getattr(sys, "frozen", False)
+                        else Path(__file__).resolve().parents[1] / "config.json")
+        self.path = path or default_path
         self.data = dict(DEFAULTS)
         self.load()
 
