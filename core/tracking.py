@@ -12,16 +12,13 @@ class HandTracker:
     """Wrap MediaPipe Hands; methods execute on the GUI/processing thread."""
     def __init__(self, config: dict[str, Any]) -> None:
         import mediapipe as mp
-        if not hasattr(mp, "solutions"):
-            raise RuntimeError(
-                f"MediaPipe {getattr(mp, '__version__', 'unknown')} lacks the legacy solutions API. "
-                "Install the supported version with: python -m pip install mediapipe==0.10.21"
-            )
+        from utils.mediapipe_compat import load_solutions
         self.mp = mp
-        self.hands = mp.solutions.hands.Hands(static_image_mode=False, max_num_hands=1,
+        self.solutions = load_solutions(mp)
+        self.hands = self.solutions.hands.Hands(static_image_mode=False, max_num_hands=1,
             model_complexity=0, min_detection_confidence=float(config.get("min_detection_confidence", .75)),
             min_tracking_confidence=float(config.get("min_tracking_confidence", .75)))
-        self.drawer = mp.solutions.drawing_utils
+        self.drawer = self.solutions.drawing_utils
         self.screen_w, self.screen_h = pyautogui.size()
         self.margin = float(config.get("camera_margin", .15))
         self.invert_cursor_x = bool(config.get("invert_cursor_x", True))
@@ -50,7 +47,7 @@ class HandTracker:
             if result.multi_hand_landmarks:
                 hand = result.multi_hand_landmarks[0]
                 landmarks = {i: np.array([p.x, p.y, p.z], dtype=float) for i, p in enumerate(hand.landmark)}
-                self.drawer.draw_landmarks(rgb, hand, self.mp.solutions.hands.HAND_CONNECTIONS)
+                self.drawer.draw_landmarks(rgb, hand, self.solutions.hands.HAND_CONNECTIONS)
             return landmarks, rgb
         except Exception:
             self.logger.exception("Landmark processing failed")
