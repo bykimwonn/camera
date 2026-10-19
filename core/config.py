@@ -19,8 +19,8 @@ DEFAULTS: dict[str, Any] = {
     "overlay_position": [20, 20], "overlay_size": [320, 240], "fail_safe_corner": True,
     "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
     "camera_margin": 0.20, "motion_diagnostics": True,
-    "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 18.0,
-    "config_version": 4, "enabled": True,
+    "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 24.0, "eye_max_speed_px_s": 400.0,
+    "config_version": 5, "enabled": True,
 }
 
 
@@ -61,6 +61,10 @@ class ConfigManager:
                         if loaded.get("camera_id") == 1:
                             loaded["camera_id"] = DEFAULTS["camera_id"]
                         loaded["config_version"] = 4
+                    if old_version < 5:
+                        if loaded.get("eye_deadband_px", 18.0) == 18.0:
+                            loaded["eye_deadband_px"] = DEFAULTS["eye_deadband_px"]
+                        loaded["config_version"] = 5
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)
