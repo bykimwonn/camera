@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 DEFAULTS: dict[str, Any] = {
-    # On the reported PC, device 0 resolves to the phone camera; prefer laptop webcam index 1.
-    "camera_id": 1, "camera_fps": 15, "camera_width": 320, "camera_height": 240, "smoothing_factor": 0.35,
+    # One shared camera is used by both Hand and Eye modes; keep the prior working index.
+    "camera_id": 0, "camera_fps": 15, "camera_width": 320, "camera_height": 240, "smoothing_factor": 0.35,
     "one_euro_filter_enabled": True, "one_euro_min_cutoff": 0.7, "one_euro_beta": 0.015,
     "cursor_deadband_px": 10.0,
     "click_distance_threshold": 0.045, "click_release_hysteresis": 1.35,
@@ -20,7 +20,7 @@ DEFAULTS: dict[str, Any] = {
     "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
     "camera_margin": 0.20, "motion_diagnostics": True,
     "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 18.0,
-    "config_version": 2, "enabled": True,
+    "config_version": 4, "enabled": True,
 }
 
 
@@ -50,16 +50,17 @@ class ConfigManager:
                             loaded["show_overlay"] = False
                         loaded["config_version"] = 2
                     if old_version < 3:
-                        # Move off device 0 (reported as the phone camera) and lower CPU load.
-                        if loaded.get("camera_id", 0) == 0:
-                            loaded["camera_id"] = DEFAULTS["camera_id"]
                         if loaded.get("camera_fps", 30) == 30:
                             loaded["camera_fps"] = DEFAULTS["camera_fps"]
                         if loaded.get("camera_width", 640) == 640:
                             loaded["camera_width"] = DEFAULTS["camera_width"]
                         if loaded.get("camera_height", 480) == 480:
                             loaded["camera_height"] = DEFAULTS["camera_height"]
-                        loaded["config_version"] = 3
+                    if old_version < 4:
+                        # Undo the prior default-index change; Hand and Eye share one camera setting.
+                        if loaded.get("camera_id") == 1:
+                            loaded["camera_id"] = DEFAULTS["camera_id"]
+                        loaded["config_version"] = 4
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)

@@ -35,7 +35,7 @@ class SettingsDialog(QDialog):
         self.jitter = QDoubleSpinBox(); self.jitter.setRange(0, 20); self.jitter.setSingleStep(1); self.jitter.setSuffix(" px"); self.jitter.setValue(config.get("cursor_deadband_px", 10.0))
         self.min_cutoff = QDoubleSpinBox(); self.min_cutoff.setRange(.2, 3.0); self.min_cutoff.setSingleStep(.1); self.min_cutoff.setValue(config.get("one_euro_min_cutoff", .7))
         self.beta = QDoubleSpinBox(); self.beta.setRange(0, .1); self.beta.setSingleStep(.005); self.beta.setValue(config.get("one_euro_beta", .015))
-        rows = [("Camera device index (laptop camera is often 1)", self.camera), ("Camera FPS", self.fps), ("Scroll sensitivity", self.sensitivity),
+        rows = [("Camera device index (shared by Hand and Eye)", self.camera), ("Camera FPS", self.fps), ("Scroll sensitivity", self.sensitivity),
                 ("EMA smoothing", self.smoothing), ("Pinch threshold", self.pinch), ("One Euro filter", self.one_euro),
                 ("Filter cutoff (lower = steadier/slower)", self.min_cutoff), ("Filter response (higher = less lag)", self.beta),
                 ("Show floating HUD", self.overlay), ("Invert horizontal cursor", self.invert_x),
