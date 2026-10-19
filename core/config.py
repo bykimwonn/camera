@@ -19,7 +19,7 @@ DEFAULTS: dict[str, Any] = {
     "overlay_position": [20, 20], "overlay_size": [320, 240], "fail_safe_corner": True,
     "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
     "camera_margin": 0.20, "motion_diagnostics": True,
-    "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 24.0, "eye_max_speed_px_s": 400.0,
+    "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 24.0, "eye_max_speed_px_s": 250.0,
     "config_version": 5, "enabled": True,
 }
 

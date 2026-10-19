@@ -146,7 +146,7 @@ class GestureFlowApp:
         self.eye_last_sample_time = now
         movement = filtered - previous
         distance = float(np.linalg.norm(movement))
-        max_step = max(1.0, float(self.cfg.get("eye_max_speed_px_s", 400.0)) * dt)
+        max_step = max(1.0, float(self.cfg.get("eye_max_speed_px_s", 250.0)) * dt)
         rate_limited = distance > max_step
         if rate_limited and distance > 0:
             candidate = previous + movement * (max_step / distance)

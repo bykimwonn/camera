@@ -55,7 +55,7 @@ class SettingsDialog(QDialog):
         self.eye_deadband.setValue(config.get("eye_deadband_px", 18.0))
         tracking_form.addRow("Eye gaze jitter deadband", self.eye_deadband)
         self.eye_max_speed = QDoubleSpinBox(); self.eye_max_speed.setRange(100, 1500); self.eye_max_speed.setSingleStep(50); self.eye_max_speed.setSuffix(" px/s")
-        self.eye_max_speed.setValue(config.get("eye_max_speed_px_s", 400.0))
+        self.eye_max_speed.setValue(config.get("eye_max_speed_px_s", 250.0))
         tracking_form.addRow("Eye cursor maximum speed", self.eye_max_speed)
         self.eye_calibrate = QPushButton("Calibrate Eye Gaze")
         self.eye_calibrate.setEnabled(self.on_calibrate_eye is not None)
