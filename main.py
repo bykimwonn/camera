@@ -4,16 +4,16 @@ import sys, logging, time
 from collections import deque
 import numpy as np
 from pynput import keyboard, mouse
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
-from PyQt6.QtGui import QIcon, QImage, QPixmap
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QSystemTrayIcon
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 from core.config import ConfigManager
 from core.capture import CameraWorker
 from core.tracking import HandTracker
 from core.gesture_engine import GestureEngine
-from core.eye_tracking import EyeGazeTracker
+from core.head_tracking import HeadPositionTracker
+from core.dwell_clicker import DwellClicker
 from core.input_controller import InputController
-from gui.eye_calibration import EyeCalibrationDialog
 from utils.smoothing import OneEuroFilter
 from gui.overlay import HudOverlay
 from gui.settings_dialog import SettingsDialog
@@ -33,17 +33,16 @@ class GestureFlowApp:
         self.app=app; self.log=configure_logging(); self.manager=ConfigManager(); self.cfg=self.manager.data
         self.tracker=HandTracker(self.cfg); self.controller=InputController(self.cfg.get("fail_safe_corner",True))
         self.engine=GestureEngine(self.cfg,self.tracker,self.controller)
-        self.eye_tracker: EyeGazeTracker | None = None
-        self.eye_filter: OneEuroFilter | None = None
-        self.eye_cursor_position: np.ndarray | None = None
-        self.eye_last_sample_time: float | None = None
-        self.eye_feature_history: deque[np.ndarray] = deque(maxlen=5)
-        self.eye_error: str | None = None
+        self.head_tracker: HeadPositionTracker | None = None
+        self.head_filter: OneEuroFilter | None = None
+        self.head_cursor_position: np.ndarray | None = None
+        self.head_last_sample_time: float | None = None
+        self.head_feature_history: deque[np.ndarray] = deque(maxlen=3)
+        self.head_error: str | None = None
+        self.dwell_clicker = DwellClicker(float(self.cfg.get("head_dwell_seconds", 1.0)))
         self.overlay=HudOverlay(self.cfg["overlay_position"],self.cfg["overlay_size"])
         if self.cfg.get("show_overlay",True): self.overlay.show()
         self.camera=None
-        self._camera_connected = False
-        self._eye_calibration_requested = self.cfg.get("control_mode", "Hand") == "Eye"
         self.frame_timer = QTimer()
         self.frame_timer.setInterval(50)  # Cap inference to 20 FPS; capture still drops stale frames.
         self.frame_timer.timeout.connect(self.process_latest_frame)
@@ -86,205 +85,157 @@ class GestureFlowApp:
             self.on_frame(frame)
 
     def on_status(self, ok: bool, message: str) -> None:
-        self._camera_connected = ok
         self.engine.motion_diagnostics.record("camera_status", connected=ok, message=message)
         self.tray.showMessage("GestureFlow",message,QSystemTrayIcon.MessageIcon.Information if ok else QSystemTrayIcon.MessageIcon.Warning,3000)
-        if ok and self._eye_calibration_requested:
-            QTimer.singleShot(700, self._start_requested_eye_calibration)
 
-    def _request_eye_calibration(self) -> None:
-        """Queue first-use calibration after an Eye mode is selected and camera is ready."""
-        self._eye_calibration_requested = True
-        if self._camera_connected:
-            QTimer.singleShot(700, self._start_requested_eye_calibration)
-
-    def _start_requested_eye_calibration(self) -> None:
-        if not self._eye_calibration_requested or not self._camera_connected:
-            return
-        self._eye_calibration_requested = False
-        if not self._ensure_eye_tracker():
-            QMessageBox.warning(None, "Eye gaze unavailable", self.eye_error or "Unable to start eye tracker")
-            return
-        if self.eye_tracker.calibrated:
-            return
-        self.tray.showMessage("GestureFlow", "Eye gaze needs a one-time calibration. Follow the dots.", QSystemTrayIcon.MessageIcon.Information, 4000)
-        self.calibrate_eye()
-
-    def _ensure_eye_tracker(self) -> bool:
-        if self.eye_tracker is not None:
-            if self.eye_filter is None:
-                self.eye_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
-                                                float(self.cfg.get("one_euro_beta", .015)))
+    def _ensure_head_tracker(self) -> bool:
+        if self.head_tracker is not None:
+            if self.head_filter is None:
+                self.head_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
+                                                 float(self.cfg.get("one_euro_beta", .015)))
             return True
-        if self.eye_error is not None:
+        if self.head_error is not None:
             return False
         try:
-            self.eye_tracker = EyeGazeTracker(self.cfg)
-            self.eye_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
-                                            float(self.cfg.get("one_euro_beta", .015)))
-            self.eye_error = None
+            self.head_tracker = HeadPositionTracker(self.cfg)
+            self.head_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
+                                             float(self.cfg.get("one_euro_beta", .015)))
+            self.head_error = None
             return True
         except Exception as exc:
-            self.eye_error = str(exc)
-            logging.getLogger("gestureflow.eye").exception("Could not initialize eye gaze mode")
+            self.head_error = str(exc)
+            logging.getLogger("gestureflow.head").exception("Could not initialize head cursor mode")
             return False
 
-    def _move_eye_cursor(self, point: tuple[int, int]) -> None:
-        if self.eye_filter is None:
-            return
+    def _move_head_cursor(self, point: tuple[int, int]) -> str:
+        if self.head_filter is None:
+            self.dwell_clicker.face_lost()
+            return "HEAD FILTER UNAVAILABLE"
         now = time.monotonic()
-        filtered = self.eye_filter.filter(np.asarray(point, dtype=float), now)
+        filtered = self.head_filter.filter(np.asarray(point, dtype=float), now)
         if not np.all(np.isfinite(filtered)):
-            return
-        if self.eye_cursor_position is None:
+            self.dwell_clicker.face_lost()
+            return "HEAD POSITION INVALID"
+        if self.head_cursor_position is None:
             try:
-                self.eye_cursor_position = np.asarray(self.controller.mouse.position, dtype=float)
+                self.head_cursor_position = np.asarray(self.controller.mouse.position, dtype=float)
             except Exception:
-                self.eye_cursor_position = filtered.copy()
-        previous = self.eye_cursor_position.copy()
-        dt = float(np.clip(now - self.eye_last_sample_time, 1 / 60, .25)) if self.eye_last_sample_time is not None else 1 / 15
-        self.eye_last_sample_time = now
+                self.head_cursor_position = filtered.copy()
+        previous = self.head_cursor_position.copy()
+        dt = float(np.clip(now - self.head_last_sample_time, 1 / 60, .25)) if self.head_last_sample_time is not None else 1 / 15
+        self.head_last_sample_time = now
         movement = filtered - previous
         distance = float(np.linalg.norm(movement))
-        max_step = max(1.0, float(self.cfg.get("eye_max_speed_px_s", 250.0)) * dt)
-        rate_limited = distance > max_step
-        if rate_limited and distance > 0:
+        max_step = max(1.0, float(self.cfg.get("head_max_speed_px_s", 900.0)) * dt)
+        if distance > max_step and distance > 0:
             candidate = previous + movement * (max_step / distance)
         else:
             candidate = filtered
         delta = float(np.linalg.norm(candidate - previous))
-        deadband = float(self.cfg.get("eye_deadband_px", 24.0))
-        sent = delta >= deadband or (rate_limited and delta > 1.0)
-        self.engine.motion_diagnostics.record(
-            "eye_cursor_sample", mapped_px=list(point),
-            filtered_px=[round(float(v), 2) for v in filtered],
-            output_px=[round(float(v), 2) for v in candidate],
-            delta_px=round(delta, 2), max_step_px=round(max_step, 2),
-            rate_limited=rate_limited, deadband_px=deadband, sent_to_os=sent,
-        )
-        if sent:
-            self.eye_cursor_position = candidate.copy()
+        deadband = float(self.cfg.get("head_deadband_px", 8.0))
+        if delta >= deadband or (distance > max_step and delta > 1.0):
+            self.head_cursor_position = candidate.copy()
             self.controller.move(int(round(candidate[0])), int(round(candidate[1])))
+        dwell_seconds = float(np.clip(self.cfg.get("head_dwell_seconds", 1.0), .5, 3.0))
+        self.dwell_clicker.dwell_seconds = dwell_seconds
+        clicked, progress, dwell_status = self.dwell_clicker.update(
+            tuple(map(float, self.head_cursor_position)), now)
+        if clicked:
+            self.controller.click_left()
+            self.tray.showMessage("GestureFlow", "Head dwell: left click", QSystemTrayIcon.MessageIcon.Information, 900)
+        self.engine.motion_diagnostics.record(
+            "head_cursor_sample", mapped_px=list(point),
+            filtered_px=[round(float(v), 2) for v in filtered],
+            cursor_px=[round(float(v), 2) for v in self.head_cursor_position],
+            delta_px=round(delta, 2), max_step_px=round(max_step, 2),
+            dwell_progress=round(progress, 3), clicked=clicked,
+        )
+        return dwell_status
 
     def on_frame(self, rgb: np.ndarray) -> None:
         started = time.perf_counter()
         hand_detected = False
-        eye_detected = False
+        head_detected = False
         annotated = rgb
-        if self.eye_tracker is not None and self.eye_tracker.calibrating:
-            feature, annotated = self.eye_tracker.process(rgb)
-            self.eye_tracker.sample_calibration(feature)
-            eye_detected = feature is not None
+        if self.engine.paused:
             self.engine.process(None)
-            mode = "EYE CALIBRATING"
-        elif self.engine.paused:
-            self.engine.process(None)
+            self.dwell_clicker.face_lost()
             mode = "PAUSED"
-        elif self.cfg.get("control_mode", "Hand") == "Eye":
-            if not self._ensure_eye_tracker():
+        elif self.cfg.get("control_mode", "Hand") == "Head":
+            if not self._ensure_head_tracker():
                 self.engine.process(None)
-                mode = "EYE MODE ERROR"
+                mode = "HEAD MODE ERROR"
             else:
-                feature, annotated = self.eye_tracker.process(rgb)
-                eye_detected = feature is not None
-                if not self.eye_tracker.calibrated:
-                    self.eye_feature_history.clear()
+                head, annotated = self.head_tracker.process(rgb)
+                head_detected = head is not None
+                if head is None:
+                    self.head_feature_history.clear()
+                    self.head_last_sample_time = None
+                    if self.head_filter is not None:
+                        self.head_filter.reset()
+                    self.dwell_clicker.face_lost()
                     self.engine.process(None)
-                    mode = "EYE CALIBRATION REQUIRED"
-                elif feature is None:
-                    self.eye_feature_history.clear()
-                    self.engine.process(None)
-                    mode = "NO EYES"
+                    mode = "NO HEAD"
                 else:
-                    self.eye_feature_history.append(feature.copy())
-                    stable_feature = np.median(np.stack(self.eye_feature_history), axis=0)
-                    point = self.eye_tracker.gaze_to_screen(stable_feature)
-                    if point is not None:
-                        self._move_eye_cursor(point)
-                        mode = "EYE GAZE"
-                    else:
-                        self.engine.process(None)
-                        mode = "NO GAZE"
+                    self.head_feature_history.append(head)
+                    stable_head = np.median(np.stack(self.head_feature_history), axis=0)
+                    point = self.head_tracker.map_to_screen(stable_head)
+                    self.engine.process(None)
+                    mode = self._move_head_cursor(point)
         else:
             landmarks, annotated = self.tracker.process(rgb)
             hand_detected = landmarks is not None
             mode = self.engine.process(landmarks)
         self.engine.motion_diagnostics.record(
             "frame", mode=mode, control_mode=self.cfg.get("control_mode", "Hand"),
-            hand_detected=hand_detected, eye_detected=eye_detected,
+            hand_detected=hand_detected, head_detected=head_detected,
             frame_size=[int(rgb.shape[1]), int(rgb.shape[0])],
             processing_ms=round((time.perf_counter() - started) * 1000, 2),
         )
         if self.overlay.isVisible(): self.overlay.update_frame(annotated, mode)
 
     def set_control_mode(self, mode: str) -> None:
-        """Switch exclusively between hand gestures and calibrated eye cursor."""
-        if mode not in {"Hand", "Eye"}:
+        """Switch exclusively between hand gestures and head-position dwell control."""
+        if mode not in {"Hand", "Head"}:
             return
         self.cfg["control_mode"] = mode
         self.manager.save({"control_mode": mode})
         self.controller.release_left()
-        self.eye_cursor_position = None
-        self.eye_last_sample_time = None
-        self.eye_feature_history.clear()
-        self.eye_filter = None
-        if mode == "Eye":
-            self.eye_error = None
-            if not self._ensure_eye_tracker():
-                self.tray.showMessage("GestureFlow", f"Eye mode unavailable: {self.eye_error}", QSystemTrayIcon.MessageIcon.Warning, 5000)
+        self.head_cursor_position = None
+        self.head_last_sample_time = None
+        self.head_feature_history.clear()
+        self.dwell_clicker.face_lost()
+        self.head_filter = None
+        if mode == "Head":
+            self.head_error = None
+            if not self._ensure_head_tracker():
+                self.tray.showMessage("GestureFlow", f"Head mode unavailable: {self.head_error}", QSystemTrayIcon.MessageIcon.Warning, 5000)
                 self.cfg["control_mode"] = "Hand"
                 self.manager.save({"control_mode": "Hand"})
                 mode = "Hand"
-            elif not self.eye_tracker.calibrated:
-                self._request_eye_calibration()
-        elif self.eye_tracker is not None and not self.eye_tracker.calibrating:
-            self.eye_tracker.close()
-            self.eye_tracker = None
+        elif self.head_tracker is not None:
+            self.head_tracker.close()
+            self.head_tracker = None
         self.tray.set_control_mode(mode)
 
     def toggle(self) -> None:
-        self.engine.paused=not self.engine.paused
+        self.engine.paused = not self.engine.paused
         self.tray.toggle_action.setText("Resume Gesture Control" if self.engine.paused else "Pause Gesture Control")
-        if self.engine.paused: self.controller.release_left()
+        if self.engine.paused:
+            self.controller.release_left()
+            self.dwell_clicker.face_lost()
+            self.head_feature_history.clear()
+            self.head_last_sample_time = None
+            if self.head_filter is not None:
+                self.head_filter.reset()
         self.tray.showMessage("GestureFlow", "Tracking paused" if self.engine.paused else "Tracking active")
 
     def toggle_overlay(self) -> None:
         self.overlay.setVisible(not self.overlay.isVisible())
         self.tray.overlay_action.setText("Hide HUD Overlay" if self.overlay.isVisible() else "Show HUD Overlay")
 
-    def calibrate_eye(self) -> bool:
-        self.eye_error = None
-        if not self._ensure_eye_tracker():
-            QMessageBox.warning(None, "Eye gaze unavailable", self.eye_error or "Unable to start eye tracker")
-            return False
-        if self.camera is None or not self.camera.isRunning() or not self._camera_connected:
-            QMessageBox.warning(None, "Camera unavailable", "Wait for the laptop camera to connect before eye calibration.")
-            return False
-        was_paused = self.engine.paused
-        self.engine.paused = True
-        try:
-            dialog = EyeCalibrationDialog(self.eye_tracker)
-            if dialog.exec() == QDialog.DialogCode.Accepted and self.eye_tracker.calibration_success:
-                self.manager.save({"eye_calibration": self.eye_tracker.calibration_data()})
-                self.cfg = self.manager.data
-                self.eye_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
-                                                float(self.cfg.get("one_euro_beta", .015)))
-                self.eye_cursor_position = None
-                self.eye_last_sample_time = None
-                self.eye_feature_history.clear()
-                self.tray.showMessage("GestureFlow", self.eye_tracker.calibration_status, QSystemTrayIcon.MessageIcon.Information, 4000)
-                return True
-            self.tray.showMessage("GestureFlow", self.eye_tracker.calibration_status, QSystemTrayIcon.MessageIcon.Warning, 4000)
-            return False
-        except Exception as exc:
-            logging.getLogger("gestureflow.eye").exception("Eye calibration failed")
-            QMessageBox.warning(None, "Eye calibration failed", str(exc))
-            return False
-        finally:
-            self.engine.paused = was_paused
-
     def settings(self) -> None:
-        dialog = SettingsDialog(self.cfg, self.manager, on_calibrate_eye=self.calibrate_eye)
+        dialog = SettingsDialog(self.cfg, self.manager)
         if dialog.exec():
             old_tracker = self.tracker
             try:
@@ -294,21 +245,30 @@ class GestureFlowApp:
                 self.engine = GestureEngine(self.cfg, self.tracker, self.controller)
                 self.engine.motion_diagnostics = diagnostics
                 old_tracker.close()
-                if self.camera.camera_id != self.cfg["camera_id"] or self.camera.fps != self.cfg["camera_fps"]:
+                if (self.camera.camera_id != self.cfg["camera_id"] or
+                        self.camera.fps != self.cfg["camera_fps"]):
                     self.start_camera()
                 self.overlay.setVisible(self.cfg["show_overlay"])
                 self.tray.set_control_mode(self.cfg.get("control_mode", "Hand"))
-                if self.cfg.get("control_mode", "Hand") == "Eye":
-                    self.eye_error = None
-                    if not self._ensure_eye_tracker():
-                        QMessageBox.warning(None, "Eye gaze unavailable", self.eye_error or "Unable to start eye tracker")
-                    elif not self.eye_tracker.calibrated:
-                        self._request_eye_calibration()
-                elif self.eye_tracker is not None and not self.eye_tracker.calibrating:
-                    self.eye_tracker.close()
-                    self.eye_tracker = None
-                    self.eye_filter = None
-                    self.eye_cursor_position = None
+                self.dwell_clicker = DwellClicker(float(self.cfg.get("head_dwell_seconds", 1.0)))
+                if self.cfg.get("control_mode", "Hand") == "Head":
+                    if self.head_tracker is not None:
+                        self.head_tracker.close()
+                        self.head_tracker = None
+                    self.head_filter = None
+                    self.head_cursor_position = None
+                    self.head_last_sample_time = None
+                    self.head_feature_history.clear()
+                    self.head_error = None
+                    if not self._ensure_head_tracker():
+                        QMessageBox.warning(None, "Head cursor unavailable", self.head_error or "Unable to start head tracking")
+                elif self.head_tracker is not None:
+                    self.head_tracker.close()
+                    self.head_tracker = None
+                    self.head_filter = None
+                    self.head_cursor_position = None
+                    self.head_last_sample_time = None
+                    self.head_feature_history.clear()
             except Exception as exc:
                 logging.getLogger("gestureflow").exception("Settings update failed: %s", exc)
                 QMessageBox.warning(None, "Settings update failed", str(exc))
@@ -324,7 +284,7 @@ class GestureFlowApp:
         if getattr(self,"_mouse_listener",None): self._mouse_listener.stop()
         if getattr(self,"controller",None): self.controller.close()
         if getattr(self,"tracker",None): self.tracker.close()
-        if getattr(self, "eye_tracker", None): self.eye_tracker.close()
+        if getattr(self, "head_tracker", None): self.head_tracker.close()
         if getattr(self,"engine",None): self.engine.motion_diagnostics.close()
         if getattr(self,"tray",None): self.tray.hide()
         if getattr(self,"app",None): self.app.quit()
