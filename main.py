@@ -1,6 +1,7 @@
 """GestureFlow Windows desktop entry point."""
 from __future__ import annotations
 import sys, logging, time
+from collections import deque
 import numpy as np
 from pynput import keyboard, mouse
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
@@ -35,6 +36,8 @@ class GestureFlowApp:
         self.eye_tracker: EyeGazeTracker | None = None
         self.eye_filter: OneEuroFilter | None = None
         self.eye_cursor_position: np.ndarray | None = None
+        self.eye_last_sample_time: float | None = None
+        self.eye_feature_history: deque[np.ndarray] = deque(maxlen=5)
         self.eye_error: str | None = None
         self.overlay=HudOverlay(self.cfg["overlay_position"],self.cfg["overlay_size"])
         if self.cfg.get("show_overlay",True): self.overlay.show()
@@ -109,6 +112,9 @@ class GestureFlowApp:
 
     def _ensure_eye_tracker(self) -> bool:
         if self.eye_tracker is not None:
+            if self.eye_filter is None:
+                self.eye_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
+                                                float(self.cfg.get("one_euro_beta", .015)))
             return True
         if self.eye_error is not None:
             return False
@@ -126,22 +132,39 @@ class GestureFlowApp:
     def _move_eye_cursor(self, point: tuple[int, int]) -> None:
         if self.eye_filter is None:
             return
-        filtered = self.eye_filter.filter(np.asarray(point, dtype=float), time.monotonic())
+        now = time.monotonic()
+        filtered = self.eye_filter.filter(np.asarray(point, dtype=float), now)
         if not np.all(np.isfinite(filtered)):
             return
-        previous = self.eye_cursor_position.copy() if self.eye_cursor_position is not None else None
-        delta = float(np.linalg.norm(filtered - previous)) if previous is not None else None
-        deadband = float(self.cfg.get("eye_deadband_px", 18.0))
-        sent = previous is None or delta >= deadband
+        if self.eye_cursor_position is None:
+            try:
+                self.eye_cursor_position = np.asarray(self.controller.mouse.position, dtype=float)
+            except Exception:
+                self.eye_cursor_position = filtered.copy()
+        previous = self.eye_cursor_position.copy()
+        dt = float(np.clip(now - self.eye_last_sample_time, 1 / 60, .25)) if self.eye_last_sample_time is not None else 1 / 15
+        self.eye_last_sample_time = now
+        movement = filtered - previous
+        distance = float(np.linalg.norm(movement))
+        max_step = max(1.0, float(self.cfg.get("eye_max_speed_px_s", 250.0)) * dt)
+        rate_limited = distance > max_step
+        if rate_limited and distance > 0:
+            candidate = previous + movement * (max_step / distance)
+        else:
+            candidate = filtered
+        delta = float(np.linalg.norm(candidate - previous))
+        deadband = float(self.cfg.get("eye_deadband_px", 24.0))
+        sent = delta >= deadband or (rate_limited and delta > 1.0)
         self.engine.motion_diagnostics.record(
             "eye_cursor_sample", mapped_px=list(point),
             filtered_px=[round(float(v), 2) for v in filtered],
-            delta_px=round(delta, 2) if delta is not None else None,
-            deadband_px=deadband, sent_to_os=sent,
+            output_px=[round(float(v), 2) for v in candidate],
+            delta_px=round(delta, 2), max_step_px=round(max_step, 2),
+            rate_limited=rate_limited, deadband_px=deadband, sent_to_os=sent,
         )
         if sent:
-            self.eye_cursor_position = filtered.copy()
-            self.controller.move(int(round(filtered[0])), int(round(filtered[1])))
+            self.eye_cursor_position = candidate.copy()
+            self.controller.move(int(round(candidate[0])), int(round(candidate[1])))
 
     def on_frame(self, rgb: np.ndarray) -> None:
         started = time.perf_counter()
@@ -165,13 +188,17 @@ class GestureFlowApp:
                 feature, annotated = self.eye_tracker.process(rgb)
                 eye_detected = feature is not None
                 if not self.eye_tracker.calibrated:
+                    self.eye_feature_history.clear()
                     self.engine.process(None)
                     mode = "EYE CALIBRATION REQUIRED"
                 elif feature is None:
+                    self.eye_feature_history.clear()
                     self.engine.process(None)
                     mode = "NO EYES"
                 else:
-                    point = self.eye_tracker.gaze_to_screen(feature)
+                    self.eye_feature_history.append(feature.copy())
+                    stable_feature = np.median(np.stack(self.eye_feature_history), axis=0)
+                    point = self.eye_tracker.gaze_to_screen(stable_feature)
                     if point is not None:
                         self._move_eye_cursor(point)
                         mode = "EYE GAZE"
@@ -198,6 +225,8 @@ class GestureFlowApp:
         self.manager.save({"control_mode": mode})
         self.controller.release_left()
         self.eye_cursor_position = None
+        self.eye_last_sample_time = None
+        self.eye_feature_history.clear()
         self.eye_filter = None
         if mode == "Eye":
             self.eye_error = None
@@ -241,6 +270,8 @@ class GestureFlowApp:
                 self.eye_filter = OneEuroFilter(float(self.cfg.get("one_euro_min_cutoff", .7)),
                                                 float(self.cfg.get("one_euro_beta", .015)))
                 self.eye_cursor_position = None
+                self.eye_last_sample_time = None
+                self.eye_feature_history.clear()
                 self.tray.showMessage("GestureFlow", self.eye_tracker.calibration_status, QSystemTrayIcon.MessageIcon.Information, 4000)
                 return True
             self.tray.showMessage("GestureFlow", self.eye_tracker.calibration_status, QSystemTrayIcon.MessageIcon.Warning, 4000)
