@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 from core.config import ConfigManager
 from core.capture import CameraWorker
 from core.tracking import HandTracker
-from core.face_gate import FaceGate
 from core.gesture_engine import GestureEngine
 from core.input_controller import InputController
 from gui.overlay import HudOverlay
@@ -27,8 +26,6 @@ class GestureFlowApp:
     """Owns worker, tracker, gesture engine, overlay and tray lifetimes."""
     def __init__(self, app: QApplication) -> None:
         self.app=app; self.log=configure_logging(); self.manager=ConfigManager(); self.cfg=self.manager.data
-        self.face_gate = FaceGate(float(self.cfg.get("face_match_threshold", 75.0)))
-        self._last_face_authorized = None
         self.tracker=HandTracker(self.cfg); self.controller=InputController(self.cfg.get("fail_safe_corner",True))
         self.engine=GestureEngine(self.cfg,self.tracker,self.controller)
         self.overlay=HudOverlay(self.cfg["overlay_position"],self.cfg["overlay_size"])
@@ -47,8 +44,6 @@ class GestureFlowApp:
         self._mouse_listener=mouse.Listener(on_move=self._watch_corner)
         self._mouse_listener.start()
         app.aboutToQuit.connect(self.shutdown); self.start_camera()
-        if self.cfg.get("face_verification_enabled", True) and not self.face_gate.has_profile:
-            QTimer.singleShot(900, self.settings)
 
     def _watch_corner(self, x: int, y: int) -> None:
         """Emergency pause when the pointer reaches top-left; require leaving to re-arm."""
@@ -82,22 +77,10 @@ class GestureFlowApp:
 
     def on_frame(self, rgb: np.ndarray) -> None:
         started = time.perf_counter()
-        required = bool(self.cfg.get("face_verification_enabled", True))
-        face_ok, face_status, face_boxes = self.face_gate.update(rgb, required)
-        if face_ok:
-            landmarks, annotated = self.tracker.process(rgb)
-            mode = self.engine.process(landmarks)
-        else:
-            landmarks = None
-            annotated = rgb.copy()
-            self.engine.process(None)  # release any held mouse button immediately
-            mode = face_status.upper()
-        if self._last_face_authorized is None or face_ok != self._last_face_authorized:
-            self.tray.showMessage("GestureFlow", face_status, QSystemTrayIcon.MessageIcon.Information if face_ok else QSystemTrayIcon.MessageIcon.Warning, 2500)
-            self._last_face_authorized = face_ok
+        landmarks, annotated = self.tracker.process(rgb)
+        mode = self.engine.process(landmarks)
         self.engine.motion_diagnostics.record(
             "frame", mode=mode, hand_detected=landmarks is not None,
-            face_authorized=face_ok, face_status=face_status, face_count=len(face_boxes),
             frame_size=[int(rgb.shape[1]), int(rgb.shape[0])],
             processing_ms=round((time.perf_counter() - started) * 1000, 2),
         )
@@ -114,7 +97,7 @@ class GestureFlowApp:
         self.tray.overlay_action.setText("Hide HUD Overlay" if self.overlay.isVisible() else "Show HUD Overlay")
 
     def settings(self) -> None:
-        dialog = SettingsDialog(self.cfg, self.manager, self.face_gate)
+        dialog = SettingsDialog(self.cfg, self.manager)
         if dialog.exec():
             old_tracker = self.tracker
             try:
@@ -124,12 +107,9 @@ class GestureFlowApp:
                 self.engine = GestureEngine(self.cfg, self.tracker, self.controller)
                 self.engine.motion_diagnostics = diagnostics
                 old_tracker.close()
-                self.face_gate.set_threshold(float(self.cfg.get("face_match_threshold", 75.0)))
                 if self.camera.camera_id != self.cfg["camera_id"] or self.camera.fps != self.cfg["camera_fps"]:
                     self.start_camera()
                 self.overlay.setVisible(self.cfg["show_overlay"])
-                if self.cfg.get("face_verification_enabled", True) and not self.face_gate.has_profile:
-                    self.tray.showMessage("GestureFlow", "Cursor locked: enroll your face in Settings", QSystemTrayIcon.MessageIcon.Warning, 4000)
             except Exception as exc:
                 logging.getLogger("gestureflow").exception("Settings update failed: %s", exc)
                 QMessageBox.warning(None, "Settings update failed", str(exc))

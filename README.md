@@ -14,9 +14,9 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (640×480 capture; the 2 GB GPU is not required). GestureFlow starts in the notification area with the HUD hidden. On first launch, Settings opens so you can enroll your face; the app then enables cursor input only when your enrolled face is matched and exactly one face is visible. Enrollment is local: only the OpenCV LBPH model is stored under `%USERPROFILE%\\.gestureflow\\face_profile.yml`; camera frames and enrollment crops are discarded and never uploaded. This is a convenience gate, not secure Windows authentication; a printed photo may spoof it. Keep Windows sign-in as your security boundary.
+Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (640×480 capture; the 2 GB GPU is not required). GestureFlow starts in the notification area with the HUD hidden. Settings remain available from the tray.
 
-Tray → Settings lets you select the camera, tune hand detection/tracking confidence, turn on automatic low-light enhancement, show/hide the HUD, and adjust cursor/gesture settings. CLAHE may help dim or IR frames but cannot recover detail in complete darkness. A visible-light camera still needs illumination, and the T480 IR camera must be accessible to OpenCV. The default mapping reserves a 20% border; higher `Cursor reach` means less hand travel but more cursor gain.
+Tray → Settings lets you select the camera, tune hand detection/tracking confidence, turn on automatic low-light enhancement, show/hide the HUD, and adjust cursor/gesture settings. GestureFlow uses hand tracking only; it does not capture or recognize faces. CLAHE may help dim or IR frames but cannot recover detail in complete darkness. A visible-light camera still needs illumination, and the T480 IR camera must be accessible to OpenCV. The default mapping reserves a 20% border; higher `Cursor reach` means less hand travel but more cursor gain.
 
 ## Gestures
 
