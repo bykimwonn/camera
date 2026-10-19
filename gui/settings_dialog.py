@@ -1,21 +1,28 @@
 """GestureFlow control and hand-tracking preferences."""
 from __future__ import annotations
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QDoubleSpinBox, QFormLayout, QLabel,
+    QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QLabel,
     QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 
 class SettingsDialog(QDialog):
     """Edit camera, cursor, low-light, and gesture settings."""
-    def __init__(self, config, manager, parent=None) -> None:
+    def __init__(self, config, manager, on_calibrate_eye=None, parent=None) -> None:
         super().__init__(parent)
+        self.on_calibrate_eye = on_calibrate_eye
         self.setWindowTitle("GestureFlow Settings")
         self.resize(540, 580)
         self.cfg, self.manager = config, manager
 
         tabs = QTabWidget()
         control = QWidget(); form = QFormLayout(control)
+        self.control_mode = QComboBox()
+        self.control_mode.addItem("Hand gestures", "Hand")
+        self.control_mode.addItem("Eye gaze (calibrate first)", "Eye")
+        mode_index = self.control_mode.findData(config.get("control_mode", "Hand"))
+        self.control_mode.setCurrentIndex(max(0, mode_index))
+        form.addRow("Cursor control mode", self.control_mode)
         self.camera = QSpinBox(); self.camera.setRange(0, 20); self.camera.setValue(config["camera_id"])
         self.fps = QSpinBox(); self.fps.setRange(10, 60); self.fps.setValue(config["camera_fps"])
         self.sensitivity = QSpinBox(); self.sensitivity.setRange(20, 400); self.sensitivity.setValue(config["scroll_sensitivity"])
@@ -44,7 +51,14 @@ class SettingsDialog(QDialog):
         tracking_form.addRow("Hand detection confidence", self.detection_confidence)
         tracking_form.addRow("Hand tracking confidence", self.tracking_confidence)
         tracking_form.addRow(self.low_light)
-        tracking_note = QLabel("For dim rooms, improve visible lighting or select an IR camera exposed to OpenCV. Enhancement can help, but cannot recover detail in complete darkness.")
+        self.eye_deadband = QDoubleSpinBox(); self.eye_deadband.setRange(2, 80); self.eye_deadband.setSingleStep(2); self.eye_deadband.setSuffix(" px")
+        self.eye_deadband.setValue(config.get("eye_deadband_px", 18.0))
+        tracking_form.addRow("Eye gaze jitter deadband", self.eye_deadband)
+        self.eye_calibrate = QPushButton("Calibrate Eye Gaze")
+        self.eye_calibrate.setEnabled(self.on_calibrate_eye is not None)
+        self.eye_calibrate.clicked.connect(self._calibrate_eye)
+        tracking_form.addRow(self.eye_calibrate)
+        tracking_note = QLabel("Eye gaze is a separate cursor mode and needs nine-point calibration. It moves the cursor only; use Hand gestures mode for click/scroll/zoom. Eye landmarks are processed locally, not used to identify you. For dim rooms, improve visible lighting or select an IR camera exposed to OpenCV; enhancement cannot recover detail in complete darkness.")
         tracking_note.setWordWrap(True); tracking_form.addRow(tracking_note)
         tabs.addTab(tracking, "Tracking")
 
@@ -69,8 +83,15 @@ class SettingsDialog(QDialog):
         spin = QDoubleSpinBox(); spin.setRange(.3, .95); spin.setSingleStep(.05); spin.setDecimals(2); spin.setValue(value)
         return spin
 
+    def _calibrate_eye(self) -> None:
+        if self.on_calibrate_eye:
+            success = self.on_calibrate_eye()
+            self.status.setText("Eye calibration saved." if success else "Eye calibration was cancelled or unsuccessful.")
+
     def save(self) -> None:
         updates = {
+            "control_mode": self.control_mode.currentData(),
+            "eye_deadband_px": self.eye_deadband.value(),
             "camera_id": self.camera.value(), "camera_fps": self.fps.value(),
             "scroll_sensitivity": self.sensitivity.value(), "smoothing_factor": self.smoothing.value(),
             "click_distance_threshold": self.pinch.value(), "one_euro_filter_enabled": self.one_euro.isChecked(),
