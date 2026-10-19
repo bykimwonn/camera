@@ -44,7 +44,7 @@ class DwellClicker:
             self._clicked_at = (x, y)
             self._anchor = None
             self._started = None
-            return True, 1.0, "LEFT CLICK — move head to re-arm"
+            return True, 1.0, "DWELL CLICK — move head to re-arm"
         return False, progress, f"DWELL {now - self._started:.1f}/{self.dwell_seconds:.1f}s"
 
     def face_lost(self) -> None:

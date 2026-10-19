@@ -42,6 +42,10 @@ class InputController:
         try: self.mouse.click(Button.right)
         except Exception: self.logger.exception("Right click failed")
 
+    def double_click_left(self) -> None:
+        try: self.mouse.click(Button.left, 2)
+        except Exception: self.logger.exception("Double left click failed")
+
     def scroll(self, amount: int) -> None:
         try: self.mouse.scroll(0, int(amount))
         except Exception: self.logger.exception("Scroll failed")

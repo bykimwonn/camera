@@ -11,7 +11,7 @@ class DwellClickerTests(unittest.TestCase):
         clicked, progress, status = dwell.update((108, 103), 1.01)
         self.assertTrue(clicked)
         self.assertEqual(progress, 1.0)
-        self.assertIn("LEFT CLICK", status)
+        self.assertIn("DWELL CLICK", status)
 
         clicked, _, _ = dwell.update((110, 105), 2.2)
         self.assertFalse(clicked)

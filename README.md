@@ -1,6 +1,6 @@
-# GestureFlow
+# BT CURSOR
 
-GestureFlow is a Windows 10/11 x64 desktop utility for webcam-based cursor navigation, pinch drag/click, right click, scrolling, and zoom gestures. It uses a dedicated Qt camera thread, MediaPipe hand landmarks, a debounced gesture state machine, and an optional floating HUD (hidden by default). Settings are written atomically to `config.json`; logs are stored in `%USERPROFILE%\\.gestureflow\\gestureflow.log`.
+BT CURSOR is a Windows 10/11 x64 webcam cursor-control app. Its main window lets you choose independent **Hand gestures** or **Head cursor** mode, open settings, pause control, and toggle a live camera HUD. Hand mode keeps cursor movement, pinch click/drag, right-click, scroll, and zoom. Head mode moves the cursor with face/head position, performs a configurable dwell click, and scrolls when the pointer is held at the top or bottom screen edge. It uses local MediaPipe landmarks only for tracking; it does not identify people or save camera frames. Settings are written atomically; logs remain in `%USERPROFILE%\\.gestureflow\\gestureflow.log` for compatibility.
 
 ## Install and run
 
@@ -14,9 +14,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (320×240 at 15 FPS; the 2 GB GPU is not required). The default camera index is 0 and the same camera selection and capture settings are shared by Hand and Head modes. Camera numbering varies, so choose the working laptop webcam's device index in Settings → Control if needed. GestureFlow starts in the notification area with the HUD hidden. Settings remain available from the tray. Choose **Hand gestures** or **Head movement + dwell click** from the tray's Cursor Control Mode submenu; they are mutually exclusive. Hand mode supports cursor, clicks, drag, scroll, and zoom. Head mode moves the pointer from the face/head position and left-clicks when the cursor stays still over a spot for the configured dwell time (one second by default). No gaze calibration is required. Head landmarks are processed locally only to locate the current face; the app does not identify people or save camera frames.
-
-Tray → Settings lets you adjust the dwell-click time, choose the camera, tune hand detection/tracking confidence, turn on automatic low-light enhancement, show/hide the HUD, and adjust cursor/gesture settings. A visible-light camera still needs illumination; the T480 IR camera must be accessible to OpenCV. The default mapping reserves a 20% border; higher `Cursor reach` means less head/hand travel but more cursor gain. Move the head away from a clicked spot to re-arm for the next dwell click.
+Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (320×240 at 15 FPS; the 2 GB GPU is not required). Camera index 0 and capture settings are shared by Hand and Head modes; camera numbering varies, so choose the working laptop webcam in Settings if needed. The BT CURSOR window opens directly. Select a mode card to switch immediately; **Settings** contains dwell timing and click action choices. Head mode defaults to a one-second dwell for left-click, with right-click and double-click available in Settings. To scroll, move the head-controlled cursor to the top or bottom screen edge and hold briefly; moving away after a click re-arms it. Enable **Show camera HUD** to see the tracked face box and current action. A visible-light camera needs illumination; the T480 IR camera must be accessible to OpenCV. No head calibration is required.
 
 ## Gestures
 
@@ -31,7 +29,7 @@ Gesture recognition depends on camera angle, lighting, and individual hand anato
 
 ## Capture a debug session (Windows)
 
-Run `run-debug.ps1` from PowerShell or double-click `run-debug.cmd` from Command Prompt/the Explorer. The script launches the app and saves the combined console/error output as `%USERPROFILE%\\.gestureflow\\session-<timestamp>.txt`. GestureFlow also writes `motion.jsonl` (timestamped hand-tip or head-center cursor samples, mapped and filtered cursor positions, movement delta, dwell progress/click events, whether each sample reached the OS, gesture/frame state) plus the rotating `gestureflow.log` error log in `%USERPROFILE%\\.gestureflow`. No camera frames or images are recorded. Cursor coordinates can reveal screen activity; review the files before sharing.
+Run `run-debug.ps1` from PowerShell or double-click `run-debug.cmd` from Command Prompt/the Explorer. The script launches the app and saves the combined console/error output as `%USERPROFILE%\\.gestureflow\\session-<timestamp>.txt`. BT CURSOR also writes `motion.jsonl` (timestamped hand-tip or head-center cursor samples, mapped and filtered cursor positions, movement delta, dwell progress/click events, whether each sample reached the OS, gesture/frame state) plus the rotating `gestureflow.log` error log in `%USERPROFILE%\\.gestureflow`. No camera frames or images are recorded. Cursor coordinates can reveal screen activity; review the files before sharing.
 
 After closing the app, show the latest session and motion samples in PowerShell:
 
@@ -43,15 +41,16 @@ Get-Content "$HOME\\.gestureflow\\gestureflow.log" -Tail 200
 
 Copy the relevant output and paste it into the debugging chat. Motion samples rotate automatically to bound disk use. Diagnostics are written on a background queue so disk logging does not stall tracking; the camera reader also downsizes frames if a driver ignores the requested 320×240 size. The launcher tolerates Qt's benign `SetProcessDpiAwarenessContext() failed` warning instead of aborting.
 
-## Build portable Windows executable
+## Build a single Windows executable
 
-From a clean Windows x64 environment with dependencies installed:
+On Windows, after installing dependencies, run:
 
 ```powershell
-pyinstaller --noconfirm --clean --onedir --windowed --name GestureFlow --icon assets\gestureflow.ico --add-data "assets;assets" --collect-all mediapipe --collect-all cv2 --collect-all PyQt6 main.py
+.\.venv\Scripts\Activate.ps1
+.\build_windows.ps1
 ```
 
-The directory distribution is written to `dist\\GestureFlow`. Keep the adjacent runtime files together. The executable and tray use the included custom GestureFlow icon. To pin it, open `dist\\GestureFlow\\GestureFlow.exe` in File Explorer, right-click it, and choose **Pin to taskbar** (or **Show more options → Pin to taskbar**). The frozen app stores settings under `%USERPROFILE%\\.gestureflow\\config.json`, so settings survive moving the distribution folder. Camera drivers and Windows camera privacy permissions are still required.
+The script builds one windowed file at `dist\BT CURSOR.exe` with the BT CURSOR icon and bundled MediaPipe/OpenCV/Qt assets. This one-file build can take a few minutes and starts more slowly than running from Python. Double-click the EXE to open the mode-selection/settings window; no console is shown. Settings and logs stay under `%USERPROFILE%\.gestureflow` so they survive app updates. You can pin `dist\BT CURSOR.exe` to the taskbar from File Explorer. Windows camera drivers and camera privacy permissions are still required.
 
 ## Engineering notes
 
