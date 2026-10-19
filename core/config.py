@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 DEFAULTS: dict[str, Any] = {
-    "camera_id": 0, "camera_fps": 30, "camera_width": 640, "camera_height": 480, "smoothing_factor": 0.35,
+    # On the reported PC, device 0 resolves to the phone camera; prefer laptop webcam index 1.
+    "camera_id": 1, "camera_fps": 15, "camera_width": 320, "camera_height": 240, "smoothing_factor": 0.35,
     "one_euro_filter_enabled": True, "one_euro_min_cutoff": 0.7, "one_euro_beta": 0.015,
     "cursor_deadband_px": 10.0,
     "click_distance_threshold": 0.045, "click_release_hysteresis": 1.35,
@@ -48,6 +49,17 @@ class ConfigManager:
                         if loaded.get("show_overlay") is True:
                             loaded["show_overlay"] = False
                         loaded["config_version"] = 2
+                    if old_version < 3:
+                        # Move off device 0 (reported as the phone camera) and lower CPU load.
+                        if loaded.get("camera_id", 0) == 0:
+                            loaded["camera_id"] = DEFAULTS["camera_id"]
+                        if loaded.get("camera_fps", 30) == 30:
+                            loaded["camera_fps"] = DEFAULTS["camera_fps"]
+                        if loaded.get("camera_width", 640) == 640:
+                            loaded["camera_width"] = DEFAULTS["camera_width"]
+                        if loaded.get("camera_height", 480) == 480:
+                            loaded["camera_height"] = DEFAULTS["camera_height"]
+                        loaded["config_version"] = 3
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)
