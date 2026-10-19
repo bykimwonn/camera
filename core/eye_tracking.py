@@ -15,10 +15,10 @@ class EyeGazeTracker:
 
     def __init__(self, config: dict[str, Any]) -> None:
         import mediapipe as mp
-        if not hasattr(mp, "solutions"):
-            raise RuntimeError("Eye mode requires MediaPipe 0.10.21 with mp.solutions.FaceMesh")
+        from utils.mediapipe_compat import load_solutions
         self.mp = mp
-        self.mesh = mp.solutions.face_mesh.FaceMesh(
+        self.solutions = load_solutions(mp)
+        self.mesh = self.solutions.face_mesh.FaceMesh(
             static_image_mode=False, max_num_faces=1, refine_landmarks=True,
             min_detection_confidence=float(config.get("min_detection_confidence", .65)),
             min_tracking_confidence=float(config.get("min_tracking_confidence", .65)),
