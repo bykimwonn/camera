@@ -17,7 +17,7 @@ DEFAULTS: dict[str, Any] = {
     "overlay_position": [20, 20], "overlay_size": [320, 240], "fail_safe_corner": True,
     "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
     "camera_margin": 0.20, "motion_diagnostics": True,
-    "face_verification_enabled": True, "face_match_threshold": 75.0, "config_version": 2, "enabled": True,
+    "config_version": 2, "enabled": True,
 }
 
 

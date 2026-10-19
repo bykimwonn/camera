@@ -1,19 +1,18 @@
-"""GestureFlow control, tracking, and local face-security settings."""
+"""GestureFlow control and hand-tracking preferences."""
 from __future__ import annotations
-from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel,
+    QCheckBox, QDialog, QDoubleSpinBox, QFormLayout, QLabel,
     QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 
 class SettingsDialog(QDialog):
-    """Edit settings, tune detection, and enroll a local face profile."""
-    def __init__(self, config, manager, face_gate=None, parent=None) -> None:
+    """Edit camera, cursor, low-light, and gesture settings."""
+    def __init__(self, config, manager, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("GestureFlow Settings")
-        self.resize(540, 610)
-        self.cfg, self.manager, self.face_gate = config, manager, face_gate
+        self.resize(540, 580)
+        self.cfg, self.manager = config, manager
 
         tabs = QTabWidget()
         control = QWidget(); form = QFormLayout(control)
@@ -38,15 +37,14 @@ class SettingsDialog(QDialog):
         tabs.addTab(control, "Control")
 
         tracking = QWidget(); tracking_form = QFormLayout(tracking)
-        self.detection_confidence = self._confidence(config.get("min_detection_confidence", .75))
+        self.detection_confidence = self._confidence(config.get("min_detection_confidence", .65))
         self.tracking_confidence = self._confidence(config.get("min_tracking_confidence", .65))
-        self.detection_confidence.setValue(config.get("min_detection_confidence", .65))
         self.low_light = QCheckBox("Enhance dim RGB/IR frames automatically")
         self.low_light.setChecked(config.get("low_light_enhancement", True))
         tracking_form.addRow("Hand detection confidence", self.detection_confidence)
         tracking_form.addRow("Hand tracking confidence", self.tracking_confidence)
         tracking_form.addRow(self.low_light)
-        tracking_note = QLabel("If tracking drops in dim light, improve visible lighting or select an IR camera exposed to OpenCV. Low-light enhancement helps, but cannot recover detail in complete darkness.")
+        tracking_note = QLabel("For dim rooms, improve visible lighting or select an IR camera exposed to OpenCV. Enhancement can help, but cannot recover detail in complete darkness.")
         tracking_note.setWordWrap(True); tracking_form.addRow(tracking_note)
         tabs.addTab(tracking, "Tracking")
 
@@ -61,28 +59,7 @@ class SettingsDialog(QDialog):
         advanced_form.addRow("Zoom delta", self.zoom)
         tabs.addTab(advanced, "Gestures")
 
-        access = QWidget(); access_form = QFormLayout(access)
-        self.face_required = QCheckBox("Require my enrolled face before gesture input")
-        self.face_required.setChecked(bool(config.get("face_verification_enabled", True)))
-        self.face_threshold = QDoubleSpinBox(); self.face_threshold.setRange(35, 120); self.face_threshold.setSingleStep(5)
-        self.face_threshold.setValue(config.get("face_match_threshold", 75.0))
-        self.enroll_button = QPushButton("Enroll / replace face profile")
-        self.face_status = QLabel(self.face_gate.status if self.face_gate else "Face verification unavailable")
-        self.face_status.setWordWrap(True)
-        privacy = QLabel("Face matching runs locally. Only an OpenCV face model is saved in your user profile; camera frames and enrollment samples are not uploaded. This is a convenience gate, not a replacement for Windows sign-in.")
-        privacy.setWordWrap(True)
-        access_form.addRow(self.face_required)
-        access_form.addRow("Match threshold (higher is more tolerant)", self.face_threshold)
-        access_form.addRow(self.enroll_button)
-        access_form.addRow("Enrollment status", self.face_status)
-        access_form.addRow(privacy)
-        tabs.addTab(access, "Face access")
-        self.enroll_button.setEnabled(bool(self.face_gate and self.face_gate.available))
-        self.enroll_button.clicked.connect(self._toggle_enrollment)
-        self.face_timer = QTimer(self); self.face_timer.setInterval(250); self.face_timer.timeout.connect(self._refresh_face_status)
-        self.face_timer.start()
-
-        self.status = QLabel("Camera and confidence changes restart tracking after saving.")
+        self.status = QLabel("Settings are saved locally. Camera and confidence changes restart tracking after saving.")
         self.status.setWordWrap(True)
         save = QPushButton("Save settings"); save.clicked.connect(self.save)
         layout = QVBoxLayout(self); layout.addWidget(tabs); layout.addWidget(self.status); layout.addWidget(save)
@@ -91,22 +68,6 @@ class SettingsDialog(QDialog):
     def _confidence(value: float) -> QDoubleSpinBox:
         spin = QDoubleSpinBox(); spin.setRange(.3, .95); spin.setSingleStep(.05); spin.setDecimals(2); spin.setValue(value)
         return spin
-
-    def _toggle_enrollment(self) -> None:
-        if not self.face_gate:
-            return
-        if self.face_gate.enrolling:
-            self.face_gate.cancel_enrollment()
-            self.enroll_button.setText("Enroll / replace face profile")
-        elif self.face_gate.begin_enrollment():
-            self.enroll_button.setText("Cancel enrollment")
-        self._refresh_face_status()
-
-    def _refresh_face_status(self) -> None:
-        if self.face_gate:
-            self.face_status.setText(self.face_gate.status)
-            if self.face_gate.has_profile and not self.face_gate.enrolling:
-                self.enroll_button.setText("Enroll / replace face profile")
 
     def save(self) -> None:
         updates = {
@@ -121,16 +82,6 @@ class SettingsDialog(QDialog):
             "low_light_enhancement": self.low_light.isChecked(),
             "left_drag_hold_ms": self.drag_hold.value(), "scroll_deadzone_y": self.deadzone.value(),
             "scroll_pair_distance_threshold": self.scroll_pair.value(), "zoom_threshold_delta": self.zoom.value(),
-            "face_verification_enabled": self.face_required.isChecked(),
-            "face_match_threshold": self.face_threshold.value(),
         }
         self.manager.save(updates)
-        if self.face_gate:
-            self.face_gate.set_threshold(self.face_threshold.value())
         self.accept()
-
-    def closeEvent(self, event) -> None:
-        if self.face_gate and self.face_gate.enrolling:
-            self.face_gate.cancel_enrollment()
-        self.face_timer.stop()
-        super().closeEvent(event)
