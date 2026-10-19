@@ -14,7 +14,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (640×480 capture; the 2 GB GPU is not required). GestureFlow starts in the notification area with the HUD hidden. Settings remain available from the tray. Choose **Hand gestures** or **Eye gaze** from the tray's Cursor Control Mode submenu; they are mutually exclusive. Hand mode supports cursor, clicks, drag, scroll, and zoom. Eye mode moves the pointer only; use a physical mouse/keyboard for clicks. Eye landmarks are processed locally and are not used for identity recognition.
+Allow camera access in Windows privacy settings. Defaults are tuned for laptop CPUs (320×240 at 15 FPS; the 2 GB GPU is not required). The default camera index is 1 on the reported machine; camera numbering varies, so choose the laptop webcam's device index in Settings → Control if needed. GestureFlow starts in the notification area with the HUD hidden. Settings remain available from the tray. Choose **Hand gestures** or **Eye gaze** from the tray's Cursor Control Mode submenu; they are mutually exclusive. Hand mode supports cursor, clicks, drag, scroll, and zoom. Eye mode moves the pointer only; use a physical mouse/keyboard for clicks. Eye landmarks are processed locally and are not used for identity recognition.
 
 Eye gaze requires one-time nine-point calibration: select tray → Open Settings → Tracking → Calibrate Eye Gaze, then follow each dot while keeping your head still. Calibration is saved in the local configuration. Ordinary laptop webcams can have significant gaze error; IR support varies by driver. If it drifts, recalibrate with better front lighting and raise the Eye gaze jitter deadband. Tray → Settings also lets you select the camera, tune hand detection/tracking confidence, turn on automatic low-light enhancement, show/hide the HUD, and adjust cursor/gesture settings. Hand mode uses hand tracking; Eye mode processes only the eye/iris landmarks needed for gaze and does not identify or recognize people. No camera frames are saved. CLAHE may help dim or IR frames but cannot recover detail in complete darkness. A visible-light camera still needs illumination, and the T480 IR camera must be accessible to OpenCV. The default mapping reserves a 20% border; higher `Cursor reach` means less hand travel but more cursor gain.
 
@@ -41,7 +41,7 @@ Get-Content "$HOME\\.gestureflow\\motion.jsonl" -Tail 200
 Get-Content "$HOME\\.gestureflow\\gestureflow.log" -Tail 200
 ```
 
-Copy the relevant output and paste it into the debugging chat. Motion samples rotate automatically to bound disk use. Diagnostics are written on a background queue so disk logging does not stall tracking; the camera reader also downsizes frames if a driver ignores the requested 640×480 size. The launcher tolerates Qt's benign `SetProcessDpiAwarenessContext() failed` warning instead of aborting.
+Copy the relevant output and paste it into the debugging chat. Motion samples rotate automatically to bound disk use. Diagnostics are written on a background queue so disk logging does not stall tracking; the camera reader also downsizes frames if a driver ignores the requested 320×240 size. The launcher tolerates Qt's benign `SetProcessDpiAwarenessContext() failed` warning instead of aborting.
 
 ## Build portable Windows executable
 
