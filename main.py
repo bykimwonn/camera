@@ -39,6 +39,8 @@ class GestureFlowApp:
         self.overlay=HudOverlay(self.cfg["overlay_position"],self.cfg["overlay_size"])
         if self.cfg.get("show_overlay",True): self.overlay.show()
         self.camera=None
+        self._camera_connected = False
+        self._eye_calibration_requested = self.cfg.get("control_mode", "Hand") == "Eye"
         self.frame_timer = QTimer()
         self.frame_timer.setInterval(50)  # Cap inference to 20 FPS; capture still drops stale frames.
         self.frame_timer.timeout.connect(self.process_latest_frame)
@@ -53,10 +55,6 @@ class GestureFlowApp:
         self._mouse_listener=mouse.Listener(on_move=self._watch_corner)
         self._mouse_listener.start()
         app.aboutToQuit.connect(self.shutdown); self.start_camera()
-        if self.cfg.get("control_mode", "Hand") == "Eye" and not self.cfg.get("eye_calibration"):
-            QTimer.singleShot(1000, lambda: self.tray.showMessage(
-                "GestureFlow", "Eye mode is selected but not calibrated. Open Settings → Tracking.",
-                QSystemTrayIcon.MessageIcon.Warning, 5000))
 
     def _watch_corner(self, x: int, y: int) -> None:
         """Emergency pause when the pointer reaches top-left; require leaving to re-arm."""
@@ -85,8 +83,29 @@ class GestureFlowApp:
             self.on_frame(frame)
 
     def on_status(self, ok: bool, message: str) -> None:
+        self._camera_connected = ok
         self.engine.motion_diagnostics.record("camera_status", connected=ok, message=message)
         self.tray.showMessage("GestureFlow",message,QSystemTrayIcon.MessageIcon.Information if ok else QSystemTrayIcon.MessageIcon.Warning,3000)
+        if ok and self._eye_calibration_requested:
+            QTimer.singleShot(700, self._start_requested_eye_calibration)
+
+    def _request_eye_calibration(self) -> None:
+        """Queue first-use calibration after an Eye mode is selected and camera is ready."""
+        self._eye_calibration_requested = True
+        if self._camera_connected:
+            QTimer.singleShot(700, self._start_requested_eye_calibration)
+
+    def _start_requested_eye_calibration(self) -> None:
+        if not self._eye_calibration_requested or not self._camera_connected:
+            return
+        self._eye_calibration_requested = False
+        if not self._ensure_eye_tracker():
+            QMessageBox.warning(None, "Eye gaze unavailable", self.eye_error or "Unable to start eye tracker")
+            return
+        if self.eye_tracker.calibrated:
+            return
+        self.tray.showMessage("GestureFlow", "Eye gaze needs a one-time calibration. Follow the dots.", QSystemTrayIcon.MessageIcon.Information, 4000)
+        self.calibrate_eye()
 
     def _ensure_eye_tracker(self) -> bool:
         if self.eye_tracker is not None:
@@ -188,7 +207,7 @@ class GestureFlowApp:
                 self.manager.save({"control_mode": "Hand"})
                 mode = "Hand"
             elif not self.eye_tracker.calibrated:
-                self.tray.showMessage("GestureFlow", "Eye mode selected. Calibrate it in Settings → Tracking.", QSystemTrayIcon.MessageIcon.Warning, 5000)
+                self._request_eye_calibration()
         elif self.eye_tracker is not None and not self.eye_tracker.calibrating:
             self.eye_tracker.close()
             self.eye_tracker = None
@@ -209,8 +228,8 @@ class GestureFlowApp:
         if not self._ensure_eye_tracker():
             QMessageBox.warning(None, "Eye gaze unavailable", self.eye_error or "Unable to start eye tracker")
             return False
-        if self.camera is None or not self.camera.isRunning():
-            QMessageBox.warning(None, "Camera unavailable", "Connect a camera before eye calibration.")
+        if self.camera is None or not self.camera.isRunning() or not self._camera_connected:
+            QMessageBox.warning(None, "Camera unavailable", "Wait for the laptop camera to connect before eye calibration.")
             return False
         was_paused = self.engine.paused
         self.engine.paused = True
@@ -253,7 +272,7 @@ class GestureFlowApp:
                     if not self._ensure_eye_tracker():
                         QMessageBox.warning(None, "Eye gaze unavailable", self.eye_error or "Unable to start eye tracker")
                     elif not self.eye_tracker.calibrated:
-                        self.tray.showMessage("GestureFlow", "Eye mode needs calibration: Settings → Tracking → Calibrate Eye Gaze", QSystemTrayIcon.MessageIcon.Warning, 5000)
+                        self._request_eye_calibration()
                 elif self.eye_tracker is not None and not self.eye_tracker.calibrating:
                     self.eye_tracker.close()
                     self.eye_tracker = None
