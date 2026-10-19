@@ -1,4 +1,4 @@
-"""GestureFlow control and hand-tracking preferences."""
+"""BT CURSOR camera, mode, and gesture preferences."""
 from __future__ import annotations
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QLabel,
@@ -10,7 +10,7 @@ class SettingsDialog(QDialog):
     """Edit camera, cursor, low-light, and gesture settings."""
     def __init__(self, config, manager, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("GestureFlow Settings")
+        self.setWindowTitle("BT CURSOR Settings")
         self.resize(540, 580)
         self.cfg, self.manager = config, manager
 
@@ -18,7 +18,7 @@ class SettingsDialog(QDialog):
         control = QWidget(); form = QFormLayout(control)
         self.control_mode = QComboBox()
         self.control_mode.addItem("Hand gestures", "Hand")
-        self.control_mode.addItem("Head movement + dwell click", "Head")
+        self.control_mode.addItem("Head cursor + dwell click/scroll", "Head")
         mode_index = self.control_mode.findData(config.get("control_mode", "Hand"))
         self.control_mode.setCurrentIndex(max(0, mode_index))
         form.addRow("Cursor control mode", self.control_mode)
@@ -52,8 +52,15 @@ class SettingsDialog(QDialog):
         tracking_form.addRow(self.low_light)
         self.head_dwell = QDoubleSpinBox(); self.head_dwell.setRange(.5, 3.0); self.head_dwell.setSingleStep(.25); self.head_dwell.setSuffix(" s")
         self.head_dwell.setValue(config.get("head_dwell_seconds", 1.0))
-        tracking_form.addRow("Hold head steady to left-click", self.head_dwell)
-        tracking_note = QLabel("Head mode moves the cursor with your face/head position. Hold still over a target for the dwell time to left-click; move away to re-arm. The optional HUD outlines the tracked face and shows dwell progress. It uses local face landmarks only and does not identify you. Hand mode remains separate and retains its gesture controls.")
+        tracking_form.addRow("Hold head steady to click", self.head_dwell)
+        self.head_click_action = QComboBox()
+        self.head_click_action.addItem("Left click", "left")
+        self.head_click_action.addItem("Right click", "right")
+        self.head_click_action.addItem("Double-click", "double")
+        action_index = self.head_click_action.findData(config.get("head_click_action", "left"))
+        self.head_click_action.setCurrentIndex(max(0, action_index))
+        tracking_form.addRow("Head dwell action", self.head_click_action)
+        tracking_note = QLabel("Head mode moves the cursor with your face/head position. Hold still for the dwell time to perform the selected click. Hold near the top or bottom screen edge to scroll; move away after a click to re-arm. The optional HUD outlines the tracked face and shows action status. It uses local face landmarks only and does not identify you. Hand mode remains separate and retains its gesture controls.")
         tracking_note.setWordWrap(True); tracking_form.addRow(tracking_note)
         tabs.addTab(tracking, "Tracking")
 
@@ -82,6 +89,7 @@ class SettingsDialog(QDialog):
         updates = {
             "control_mode": self.control_mode.currentData(),
             "head_dwell_seconds": self.head_dwell.value(),
+            "head_click_action": self.head_click_action.currentData(),
             "camera_id": self.camera.value(), "camera_fps": self.fps.value(),
             "scroll_sensitivity": self.sensitivity.value(), "smoothing_factor": self.smoothing.value(),
             "click_distance_threshold": self.pinch.value(), "one_euro_filter_enabled": self.one_euro.isChecked(),

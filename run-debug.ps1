@@ -16,7 +16,7 @@ $sessionLog = Join-Path $logDir "session-$stamp.txt"
 $motionLog = Join-Path $logDir 'motion.jsonl'
 $appLog = Join-Path $logDir 'gestureflow.log'
 
-Write-Host 'Starting GestureFlow with console capture.' -ForegroundColor Cyan
+Write-Host 'Starting BT CURSOR with console capture.' -ForegroundColor Cyan
 Write-Host "Session output: $sessionLog"
 Write-Host "Cursor samples: $motionLog"
 Write-Host "Application log: $appLog"
@@ -34,5 +34,5 @@ finally {
     $ErrorActionPreference = $previousErrorActionPreference
     Pop-Location
 }
-Write-Host "GestureFlow exited with code $appExitCode. Logs remain in $logDir" -ForegroundColor Yellow
+Write-Host "BT CURSOR exited with code $appExitCode. Logs remain in $logDir" -ForegroundColor Yellow
 if ($appExitCode -ne 0) { exit $appExitCode }

@@ -17,6 +17,6 @@ def load_solutions(mediapipe: ModuleType) -> ModuleType:
         location = getattr(mediapipe, "__file__", "unknown")
         raise RuntimeError(
             f"MediaPipe {version} at {location} does not provide its legacy Solutions API. "
-            "Activate GestureFlow's .venv and run: "
+            "Activate BT CURSOR's .venv and run: "
             "python -m pip install --force-reinstall mediapipe==0.10.21"
         ) from exc

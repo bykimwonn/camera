@@ -21,7 +21,9 @@ DEFAULTS: dict[str, Any] = {
     "camera_margin": 0.20, "motion_diagnostics": True,
     "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 24.0, "eye_max_speed_px_s": 250.0,
     "head_dwell_seconds": 1.0, "head_deadband_px": 8.0, "head_max_speed_px_s": 900.0,
-    "config_version": 6, "enabled": True,
+    "head_click_action": "left", "head_scroll_edge_fraction": 0.08,
+    "head_scroll_delay_s": 0.6, "head_scroll_interval_s": 0.22, "head_scroll_amount": 3,
+    "config_version": 7, "enabled": True,
 }
 
 
@@ -70,6 +72,8 @@ class ConfigManager:
                         if loaded.get("control_mode") == "Eye":
                             loaded["control_mode"] = "Head"
                         loaded["config_version"] = 6
+                    if old_version < 7:
+                        loaded["config_version"] = 7
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)

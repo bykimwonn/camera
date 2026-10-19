@@ -1,4 +1,4 @@
-"""GestureFlow Windows desktop entry point."""
+"""BT CURSOR Windows desktop entry point."""
 from __future__ import annotations
 import sys, logging, time
 from collections import deque
@@ -16,6 +16,7 @@ from core.dwell_clicker import DwellClicker
 from core.input_controller import InputController
 from utils.smoothing import OneEuroFilter
 from gui.overlay import HudOverlay
+from gui.app_window import BTMainWindow
 from gui.settings_dialog import SettingsDialog
 from gui.tray import TrayController
 from utils.logger import configure_logging
@@ -40,6 +41,8 @@ class GestureFlowApp:
         self.head_feature_history: deque[np.ndarray] = deque(maxlen=3)
         self.head_error: str | None = None
         self.dwell_clicker = DwellClicker(float(self.cfg.get("head_dwell_seconds", 1.0)))
+        self.head_scroll_direction = 0
+        self.head_scroll_next_at: float | None = None
         self.overlay=HudOverlay(self.cfg["overlay_position"],self.cfg["overlay_size"])
         if self.cfg.get("show_overlay",True): self.overlay.show()
         self.camera=None
@@ -47,9 +50,14 @@ class GestureFlowApp:
         self.frame_timer.setInterval(50)  # Cap inference to 20 FPS; capture still drops stale frames.
         self.frame_timer.timeout.connect(self.process_latest_frame)
         self.frame_timer.start()
-        self.tray=TrayController({"toggle":self.toggle,"set_mode":self.set_control_mode,"overlay":self.toggle_overlay,"settings":self.settings,"calibrate":self.calibrate,"exit":self.shutdown})
+        callbacks = {"toggle": self.toggle, "set_mode": self.set_control_mode,
+                     "overlay": self.toggle_overlay, "settings": self.settings,
+                     "calibrate": self.calibrate, "exit": self.shutdown,
+                     "show_window": self.show_window}
+        self.tray = TrayController(callbacks)
+        self.window = BTMainWindow(self.cfg, callbacks)
         self.tray.set_control_mode(self.cfg.get("control_mode", "Hand"))
-        self.tray.overlay_action.setText("Hide HUD Overlay" if self.overlay.isVisible() else "Show HUD Overlay")
+        self.tray.overlay_action.setText("Hide Camera HUD" if self.overlay.isVisible() else "Show Camera HUD")
         self.emergency=EmergencySignals(); self.emergency.pause_requested.connect(self.toggle)
         self._hotkey=keyboard.GlobalHotKeys({'<ctrl>+<shift>+<esc>': self.emergency.pause_requested.emit})
         self._hotkey.start()
@@ -86,7 +94,9 @@ class GestureFlowApp:
 
     def on_status(self, ok: bool, message: str) -> None:
         self.engine.motion_diagnostics.record("camera_status", connected=ok, message=message)
-        self.tray.showMessage("GestureFlow",message,QSystemTrayIcon.MessageIcon.Information if ok else QSystemTrayIcon.MessageIcon.Warning,3000)
+        self.tray.showMessage("BT CURSOR", message, QSystemTrayIcon.MessageIcon.Information if ok else QSystemTrayIcon.MessageIcon.Warning, 3000)
+        if hasattr(self, "window"):
+            self.window.set_camera_status(ok, message)
 
     def _ensure_head_tracker(self) -> bool:
         if self.head_tracker is not None:
@@ -136,19 +146,50 @@ class GestureFlowApp:
         if delta >= deadband or (distance > max_step and delta > 1.0):
             self.head_cursor_position = candidate.copy()
             self.controller.move(int(round(candidate[0])), int(round(candidate[1])))
-        dwell_seconds = float(np.clip(self.cfg.get("head_dwell_seconds", 1.0), .5, 3.0))
-        self.dwell_clicker.dwell_seconds = dwell_seconds
-        clicked, progress, dwell_status = self.dwell_clicker.update(
-            tuple(map(float, self.head_cursor_position)), now)
-        if clicked:
-            self.controller.click_left()
-            self.tray.showMessage("GestureFlow", "Head dwell: left click", QSystemTrayIcon.MessageIcon.Information, 900)
+        screen_h = self.head_tracker.screen_h if self.head_tracker is not None else 1
+        edge_px = max(32, int(screen_h * float(self.cfg.get("head_scroll_edge_fraction", .08))))
+        cursor_y = float(self.head_cursor_position[1])
+        scroll_direction = 1 if cursor_y <= edge_px else -1 if cursor_y >= screen_h - edge_px else 0
+        clicked = False
+        progress = 0.0
+        if scroll_direction:
+            self.dwell_clicker.face_lost()
+            self.head_scroll_next_at = self.head_scroll_next_at if self.head_scroll_direction == scroll_direction else None
+            self.head_scroll_direction = scroll_direction
+            if self.head_scroll_next_at is None:
+                self.head_scroll_next_at = now + float(self.cfg.get("head_scroll_delay_s", .6))
+            if now >= self.head_scroll_next_at:
+                amount = max(1, int(self.cfg.get("head_scroll_amount", 3)))
+                self.controller.scroll(scroll_direction * amount)
+                self.head_scroll_next_at = now + float(self.cfg.get("head_scroll_interval_s", .22))
+            direction_label = "UP" if scroll_direction > 0 else "DOWN"
+            remaining = max(0.0, (self.head_scroll_next_at or now) - now)
+            dwell_status = f"SCROLL {direction_label}" if remaining <= .05 else f"SCROLL {direction_label} IN {remaining:.1f}s"
+        else:
+            self.head_scroll_direction = 0
+            self.head_scroll_next_at = None
+            dwell_seconds = float(np.clip(self.cfg.get("head_dwell_seconds", 1.0), .5, 3.0))
+            self.dwell_clicker.dwell_seconds = dwell_seconds
+            clicked, progress, dwell_status = self.dwell_clicker.update(
+                tuple(map(float, self.head_cursor_position)), now)
+            if clicked:
+                action = self.cfg.get("head_click_action", "left")
+                if action == "right":
+                    self.controller.click_right()
+                    label = "right click"
+                elif action == "double":
+                    self.controller.double_click_left()
+                    label = "double-click"
+                else:
+                    self.controller.click_left()
+                    label = "left click"
+                self.tray.showMessage("BT CURSOR", f"Head dwell: {label}", QSystemTrayIcon.MessageIcon.Information, 900)
         self.engine.motion_diagnostics.record(
             "head_cursor_sample", mapped_px=list(point),
             filtered_px=[round(float(v), 2) for v in filtered],
             cursor_px=[round(float(v), 2) for v in self.head_cursor_position],
             delta_px=round(delta, 2), max_step_px=round(max_step, 2),
-            dwell_progress=round(progress, 3), clicked=clicked,
+            scroll_direction=scroll_direction, dwell_progress=round(progress, 3), clicked=clicked,
         )
         return dwell_status
 
@@ -171,6 +212,8 @@ class GestureFlowApp:
                 if head is None:
                     self.head_feature_history.clear()
                     self.head_last_sample_time = None
+                    self.head_scroll_direction = 0
+                    self.head_scroll_next_at = None
                     if self.head_filter is not None:
                         self.head_filter.reset()
                     self.dwell_clicker.face_lost()
@@ -204,12 +247,14 @@ class GestureFlowApp:
         self.head_cursor_position = None
         self.head_last_sample_time = None
         self.head_feature_history.clear()
+        self.head_scroll_direction = 0
+        self.head_scroll_next_at = None
         self.dwell_clicker.face_lost()
         self.head_filter = None
         if mode == "Head":
             self.head_error = None
             if not self._ensure_head_tracker():
-                self.tray.showMessage("GestureFlow", f"Head mode unavailable: {self.head_error}", QSystemTrayIcon.MessageIcon.Warning, 5000)
+                self.tray.showMessage("BT CURSOR", f"Head mode unavailable: {self.head_error}", QSystemTrayIcon.MessageIcon.Warning, 5000)
                 self.cfg["control_mode"] = "Hand"
                 self.manager.save({"control_mode": "Hand"})
                 mode = "Hand"
@@ -217,22 +262,32 @@ class GestureFlowApp:
             self.head_tracker.close()
             self.head_tracker = None
         self.tray.set_control_mode(mode)
+        self.window.set_mode(mode, self.cfg)
 
     def toggle(self) -> None:
         self.engine.paused = not self.engine.paused
-        self.tray.toggle_action.setText("Resume Gesture Control" if self.engine.paused else "Pause Gesture Control")
+        self.tray.toggle_action.setText("Resume Cursor Control" if self.engine.paused else "Pause Cursor Control")
         if self.engine.paused:
             self.controller.release_left()
             self.dwell_clicker.face_lost()
             self.head_feature_history.clear()
             self.head_last_sample_time = None
+            self.head_scroll_direction = 0
+            self.head_scroll_next_at = None
             if self.head_filter is not None:
                 self.head_filter.reset()
-        self.tray.showMessage("GestureFlow", "Tracking paused" if self.engine.paused else "Tracking active")
+        self.window.set_paused(self.engine.paused)
+        self.tray.showMessage("BT CURSOR", "Tracking paused" if self.engine.paused else "Tracking active")
 
     def toggle_overlay(self) -> None:
         self.overlay.setVisible(not self.overlay.isVisible())
-        self.tray.overlay_action.setText("Hide HUD Overlay" if self.overlay.isVisible() else "Show HUD Overlay")
+        self.tray.overlay_action.setText("Hide Camera HUD" if self.overlay.isVisible() else "Show Camera HUD")
+        self.window.set_hud(self.overlay.isVisible())
+
+    def show_window(self) -> None:
+        self.window.show()
+        self.window.raise_()
+        self.window.activateWindow()
 
     def settings(self) -> None:
         dialog = SettingsDialog(self.cfg, self.manager)
@@ -250,6 +305,9 @@ class GestureFlowApp:
                     self.start_camera()
                 self.overlay.setVisible(self.cfg["show_overlay"])
                 self.tray.set_control_mode(self.cfg.get("control_mode", "Hand"))
+                self.window.set_mode(self.cfg.get("control_mode", "Hand"), self.cfg)
+                self.window.set_hud(self.cfg["show_overlay"])
+                self.window.set_paused(self.engine.paused)
                 self.dwell_clicker = DwellClicker(float(self.cfg.get("head_dwell_seconds", 1.0)))
                 if self.cfg.get("control_mode", "Hand") == "Head":
                     if self.head_tracker is not None:
@@ -275,7 +333,7 @@ class GestureFlowApp:
 
     def calibrate(self) -> None:
         self.tracker.margin=max(.05,min(.3,self.tracker.margin))
-        self.tray.showMessage("GestureFlow",f"Calibration ready. Current camera margin: {self.tracker.margin:.0%}")
+        self.tray.showMessage("BT CURSOR", f"Hand cursor mapping ready. Camera margin: {self.tracker.margin:.0%}")
 
     def shutdown(self) -> None:
         if getattr(self, "frame_timer", None): self.frame_timer.stop()
@@ -291,12 +349,16 @@ class GestureFlowApp:
 
 
 def main() -> int:
-    app=QApplication(sys.argv); app.setApplicationName("GestureFlow"); app.setWindowIcon(QIcon(str(resource_path("assets/gestureflow.png")))); app.setQuitOnLastWindowClosed(False)
+    app = QApplication(sys.argv)
+    app.setApplicationName("BT CURSOR")
+    app.setWindowIcon(QIcon(str(resource_path("assets/bt_cursor.png"))))
+    app.setQuitOnLastWindowClosed(True)
     try: runtime=GestureFlowApp(app)
     except Exception as exc:
         logging.getLogger("gestureflow").exception("Startup failed")
-        QMessageBox.critical(None,"GestureFlow startup error",f"Unable to initialize GestureFlow:\n{exc}")
+        QMessageBox.critical(None, "BT CURSOR startup error", f"Unable to initialize BT CURSOR:\n{exc}")
         return 1
+    runtime.window.show()
     return app.exec()
 
 if __name__ == "__main__":

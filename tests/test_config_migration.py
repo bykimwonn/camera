@@ -23,7 +23,7 @@ class ConfigMigrationTests(unittest.TestCase):
             self.assertEqual(config["control_mode"], "Head")
             self.assertEqual(config["head_dwell_seconds"], 1.5)
             self.assertEqual(config["eye_calibration"], legacy_calibration)
-            self.assertEqual(config["config_version"], 6)
+            self.assertEqual(config["config_version"], 7)
 
 
 if __name__ == "__main__":
