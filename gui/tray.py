@@ -21,10 +21,10 @@ class TrayController(QSystemTrayIcon):
         mode_menu = menu.addMenu("Cursor Control Mode")
         self.hand_mode_action = mode_menu.addAction("Hand gestures")
         self.hand_mode_action.setCheckable(True)
-        self.eye_mode_action = mode_menu.addAction("Eye gaze")
-        self.eye_mode_action.setCheckable(True)
+        self.head_mode_action = mode_menu.addAction("Head movement + dwell click")
+        self.head_mode_action.setCheckable(True)
         self.hand_mode_action.triggered.connect(lambda checked=False: callbacks["set_mode"]("Hand"))
-        self.eye_mode_action.triggered.connect(lambda checked=False: callbacks["set_mode"]("Eye"))
+        self.head_mode_action.triggered.connect(lambda checked=False: callbacks["set_mode"]("Head"))
         self.overlay_action=menu.addAction("Hide HUD Overlay"); self.overlay_action.triggered.connect(callbacks["overlay"])
         menu.addAction("Open Settings", callbacks["settings"])
         menu.addAction("Calibrate Camera", callbacks["calibrate"])
@@ -32,6 +32,6 @@ class TrayController(QSystemTrayIcon):
         self.setContextMenu(menu); self.show()
 
     def set_control_mode(self, mode: str) -> None:
-        """Reflect the active mutually exclusive hand/eye mode in the tray menu."""
-        self.hand_mode_action.setChecked(mode != "Eye")
-        self.eye_mode_action.setChecked(mode == "Eye")
+        """Reflect the active mutually exclusive hand/head mode in the tray menu."""
+        self.hand_mode_action.setChecked(mode != "Head")
+        self.head_mode_action.setChecked(mode == "Head")

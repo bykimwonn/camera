@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULTS: dict[str, Any] = {
-    # One shared camera is used by both Hand and Eye modes; keep the prior working index.
+    # One shared camera is used by both Hand and Head modes; keep the prior working index.
     "camera_id": 0, "camera_fps": 15, "camera_width": 320, "camera_height": 240, "smoothing_factor": 0.35,
     "one_euro_filter_enabled": True, "one_euro_min_cutoff": 0.7, "one_euro_beta": 0.015,
     "cursor_deadband_px": 10.0,
@@ -20,7 +20,8 @@ DEFAULTS: dict[str, Any] = {
     "min_detection_confidence": 0.65, "min_tracking_confidence": 0.65, "low_light_enhancement": True,
     "camera_margin": 0.20, "motion_diagnostics": True,
     "control_mode": "Hand", "eye_calibration": None, "eye_deadband_px": 24.0, "eye_max_speed_px_s": 250.0,
-    "config_version": 5, "enabled": True,
+    "head_dwell_seconds": 1.0, "head_deadband_px": 8.0, "head_max_speed_px_s": 900.0,
+    "config_version": 6, "enabled": True,
 }
 
 
@@ -57,7 +58,7 @@ class ConfigManager:
                         if loaded.get("camera_height", 480) == 480:
                             loaded["camera_height"] = DEFAULTS["camera_height"]
                     if old_version < 4:
-                        # Undo the prior default-index change; Hand and Eye share one camera setting.
+                        # Undo the prior default-index change; Hand and Head share one camera setting.
                         if loaded.get("camera_id") == 1:
                             loaded["camera_id"] = DEFAULTS["camera_id"]
                         loaded["config_version"] = 4
@@ -65,6 +66,10 @@ class ConfigManager:
                         if loaded.get("eye_deadband_px", 18.0) == 18.0:
                             loaded["eye_deadband_px"] = DEFAULTS["eye_deadband_px"]
                         loaded["config_version"] = 5
+                    if old_version < 6:
+                        if loaded.get("control_mode") == "Eye":
+                            loaded["control_mode"] = "Head"
+                        loaded["config_version"] = 6
                     self.data.update({k: v for k, v in loaded.items() if k in DEFAULTS})
         except (OSError, json.JSONDecodeError) as exc:
             logging.getLogger("gestureflow").exception("Config read failed; defaults used: %s", exc)

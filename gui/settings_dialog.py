@@ -8,9 +8,8 @@ from PyQt6.QtWidgets import (
 
 class SettingsDialog(QDialog):
     """Edit camera, cursor, low-light, and gesture settings."""
-    def __init__(self, config, manager, on_calibrate_eye=None, parent=None) -> None:
+    def __init__(self, config, manager, parent=None) -> None:
         super().__init__(parent)
-        self.on_calibrate_eye = on_calibrate_eye
         self.setWindowTitle("GestureFlow Settings")
         self.resize(540, 580)
         self.cfg, self.manager = config, manager
@@ -19,7 +18,7 @@ class SettingsDialog(QDialog):
         control = QWidget(); form = QFormLayout(control)
         self.control_mode = QComboBox()
         self.control_mode.addItem("Hand gestures", "Hand")
-        self.control_mode.addItem("Eye gaze (calibrate first)", "Eye")
+        self.control_mode.addItem("Head movement + dwell click", "Head")
         mode_index = self.control_mode.findData(config.get("control_mode", "Hand"))
         self.control_mode.setCurrentIndex(max(0, mode_index))
         form.addRow("Cursor control mode", self.control_mode)
@@ -35,11 +34,11 @@ class SettingsDialog(QDialog):
         self.jitter = QDoubleSpinBox(); self.jitter.setRange(0, 20); self.jitter.setSingleStep(1); self.jitter.setSuffix(" px"); self.jitter.setValue(config.get("cursor_deadband_px", 10.0))
         self.min_cutoff = QDoubleSpinBox(); self.min_cutoff.setRange(.2, 3.0); self.min_cutoff.setSingleStep(.1); self.min_cutoff.setValue(config.get("one_euro_min_cutoff", .7))
         self.beta = QDoubleSpinBox(); self.beta.setRange(0, .1); self.beta.setSingleStep(.005); self.beta.setValue(config.get("one_euro_beta", .015))
-        rows = [("Camera device index (shared by Hand and Eye)", self.camera), ("Camera FPS", self.fps), ("Scroll sensitivity", self.sensitivity),
+        rows = [("Camera device index (shared by Hand and Head)", self.camera), ("Camera FPS", self.fps), ("Scroll sensitivity", self.sensitivity),
                 ("EMA smoothing", self.smoothing), ("Pinch threshold", self.pinch), ("One Euro filter", self.one_euro),
                 ("Filter cutoff (lower = steadier/slower)", self.min_cutoff), ("Filter response (higher = less lag)", self.beta),
                 ("Show floating HUD", self.overlay), ("Invert horizontal cursor", self.invert_x),
-                ("Cursor reach (higher = less hand travel)", self.camera_margin), ("Jitter deadband (higher = steadier)", self.jitter)]
+                ("Cursor reach (higher = less head/hand travel)", self.camera_margin), ("Jitter deadband (higher = steadier)", self.jitter)]
         for label, widget in rows: form.addRow(label, widget)
         tabs.addTab(control, "Control")
 
@@ -51,17 +50,10 @@ class SettingsDialog(QDialog):
         tracking_form.addRow("Hand detection confidence", self.detection_confidence)
         tracking_form.addRow("Hand tracking confidence", self.tracking_confidence)
         tracking_form.addRow(self.low_light)
-        self.eye_deadband = QDoubleSpinBox(); self.eye_deadband.setRange(2, 80); self.eye_deadband.setSingleStep(2); self.eye_deadband.setSuffix(" px")
-        self.eye_deadband.setValue(config.get("eye_deadband_px", 18.0))
-        tracking_form.addRow("Eye gaze jitter deadband", self.eye_deadband)
-        self.eye_max_speed = QDoubleSpinBox(); self.eye_max_speed.setRange(100, 1500); self.eye_max_speed.setSingleStep(50); self.eye_max_speed.setSuffix(" px/s")
-        self.eye_max_speed.setValue(config.get("eye_max_speed_px_s", 250.0))
-        tracking_form.addRow("Eye cursor maximum speed", self.eye_max_speed)
-        self.eye_calibrate = QPushButton("Calibrate Eye Gaze")
-        self.eye_calibrate.setEnabled(self.on_calibrate_eye is not None)
-        self.eye_calibrate.clicked.connect(self._calibrate_eye)
-        tracking_form.addRow(self.eye_calibrate)
-        tracking_note = QLabel("Eye gaze is a separate cursor mode and needs nine-point calibration. It moves the cursor only; use Hand gestures mode for click/scroll/zoom. Eye landmarks are processed locally, not used to identify you. For dim rooms, improve visible lighting or select an IR camera exposed to OpenCV; enhancement cannot recover detail in complete darkness.")
+        self.head_dwell = QDoubleSpinBox(); self.head_dwell.setRange(.5, 3.0); self.head_dwell.setSingleStep(.25); self.head_dwell.setSuffix(" s")
+        self.head_dwell.setValue(config.get("head_dwell_seconds", 1.0))
+        tracking_form.addRow("Hold head steady to left-click", self.head_dwell)
+        tracking_note = QLabel("Head mode moves the cursor with your face/head position. Hold still over a target for the dwell time to left-click; move away to re-arm. The optional HUD outlines the tracked face and shows dwell progress. It uses local face landmarks only and does not identify you. Hand mode remains separate and retains its gesture controls.")
         tracking_note.setWordWrap(True); tracking_form.addRow(tracking_note)
         tabs.addTab(tracking, "Tracking")
 
@@ -86,16 +78,10 @@ class SettingsDialog(QDialog):
         spin = QDoubleSpinBox(); spin.setRange(.3, .95); spin.setSingleStep(.05); spin.setDecimals(2); spin.setValue(value)
         return spin
 
-    def _calibrate_eye(self) -> None:
-        if self.on_calibrate_eye:
-            success = self.on_calibrate_eye()
-            self.status.setText("Eye calibration saved." if success else "Eye calibration was cancelled or unsuccessful.")
-
     def save(self) -> None:
         updates = {
             "control_mode": self.control_mode.currentData(),
-            "eye_deadband_px": self.eye_deadband.value(),
-            "eye_max_speed_px_s": self.eye_max_speed.value(),
+            "head_dwell_seconds": self.head_dwell.value(),
             "camera_id": self.camera.value(), "camera_fps": self.fps.value(),
             "scroll_sensitivity": self.sensitivity.value(), "smoothing_factor": self.smoothing.value(),
             "click_distance_threshold": self.pinch.value(), "one_euro_filter_enabled": self.one_euro.isChecked(),
